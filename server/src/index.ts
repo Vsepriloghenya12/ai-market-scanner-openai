@@ -4,11 +4,16 @@ import { schedulerService } from './services/scheduler';
 
 const app = createApp();
 
-app.listen(config.port, () => {
-  console.log(`Сервер сканера рынка с ИИ запущен на порту ${config.port}`);
+const host = '0.0.0.0';
+
+app.listen(config.port, host, () => {
+  console.log(`Сервер сканера рынка с ИИ запущен на ${host}:${config.port}`);
   console.log(`Отслеживаемые инструменты: ${config.symbols.join(', ')}`);
   console.log(`Отслеживаемые таймфреймы: ${config.timeframes.join(', ')}`);
-  schedulerService.start();
+
+  setTimeout(() => {
+    schedulerService.start();
+  }, 3000);
 });
 
 const shutdown = () => {
