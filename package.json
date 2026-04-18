@@ -1,0 +1,22 @@
+{
+  "name": "ai-market-scanner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Русский сканер рынка с React-фронтендом и Node-бэкендом для непрерывного анализа крипторынка.",
+  "workspaces": [
+    "server",
+    "webapp"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev": "concurrently -n server,webapp -c cyan,magenta \"npm run dev --workspace server\" \"npm run dev --workspace webapp\"",
+    "build": "npm run build --workspace webapp && npm run build --workspace server",
+    "start": "npm run start --workspace server",
+    "lint": "npm run lint --workspace server && npm run lint --workspace webapp"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
