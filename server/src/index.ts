@@ -7,9 +7,10 @@ const app = createApp();
 const host = '0.0.0.0';
 
 app.listen(config.port, host, () => {
-  console.log(`Сервер сканера рынка с ИИ запущен на ${host}:${config.port}`);
-  console.log(`Отслеживаемые инструменты: ${config.symbols.join(', ')}`);
-  console.log(`Отслеживаемые таймфреймы: ${config.timeframes.join(', ')}`);
+  console.log(`Сервер сканера фьючерсов запущен на ${host}:${config.port}`);
+  console.log(`Режим рынка: ${config.bybitCategory}, котировка: ${config.quoteCoin}`);
+  console.log(`Таймфреймы: ${config.timeframes.join(', ')}`);
+  console.log(`Сканируем до ${config.maxSymbolsToAnalyze} ликвидных монет за цикл.`);
 
   setTimeout(() => {
     schedulerService.start();

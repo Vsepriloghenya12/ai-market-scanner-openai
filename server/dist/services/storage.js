@@ -13,6 +13,15 @@ const defaultAnalyzerState = {
     runCount: 0,
     lastError: null
 };
+const defaultUniverseState = {
+    fetchedAt: null,
+    totalSymbols: 0,
+    eligibleSymbols: 0,
+    analyzedSymbols: 0,
+    topSymbols: [],
+    minTurnoverUsd: config_1.config.minTurnover24hUsd,
+    maxSymbolsToAnalyze: config_1.config.maxSymbolsToAnalyze
+};
 const ensureStorageDir = () => {
     const directory = node_path_1.default.dirname(config_1.config.storageFile);
     if (!node_fs_1.default.existsSync(directory)) {
@@ -21,7 +30,8 @@ const ensureStorageDir = () => {
 };
 const defaultState = () => ({
     signals: [],
-    analyzer: { ...defaultAnalyzerState }
+    analyzer: { ...defaultAnalyzerState },
+    universe: { ...defaultUniverseState }
 });
 class StorageService {
     state;
@@ -43,6 +53,10 @@ class StorageService {
                 analyzer: {
                     ...defaultAnalyzerState,
                     ...(parsed.analyzer ?? {})
+                },
+                universe: {
+                    ...defaultUniverseState,
+                    ...(parsed.universe ?? {})
                 }
             };
         }
@@ -69,6 +83,17 @@ class StorageService {
         this.state.analyzer = {
             ...this.state.analyzer,
             ...nextState
+        };
+        this.persist();
+    }
+    getUniverseState() {
+        return { ...this.state.universe, topSymbols: [...this.state.universe.topSymbols] };
+    }
+    updateUniverseState(nextState) {
+        this.state.universe = {
+            ...this.state.universe,
+            ...nextState,
+            topSymbols: nextState.topSymbols ? [...nextState.topSymbols] : [...this.state.universe.topSymbols]
         };
         this.persist();
     }

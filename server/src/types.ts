@@ -1,6 +1,7 @@
 export type SignalType = 'BUY' | 'SELL' | 'HOLD';
+export type RecommendationType = 'BUY_NOW' | 'WAIT' | 'EXIT';
 export type MarketRegime = 'BULL' | 'BEAR' | 'RANGE';
-export type SetupType = 'TREND_BREAKOUT' | 'TREND_PULLBACK' | 'BREAKDOWN' | 'NONE';
+export type SetupType = 'BREAKOUT' | 'PULLBACK' | 'BREAKDOWN' | 'NONE';
 export type AIAnalysisStatus = 'READY' | 'SKIPPED' | 'ERROR';
 export type AIAlignment = 'ALIGNED' | 'MIXED' | 'CONTRARIAN';
 
@@ -28,8 +29,21 @@ export interface IndicatorSnapshot {
   trendGapPct: number;
 }
 
+export interface MarketSnapshot {
+  symbol: string;
+  rank24h: number;
+  turnover24hUsd: number;
+  volume24h: number;
+  spreadPct: number;
+  lastPrice: number;
+  fundingRate: number | null;
+}
+
 export interface TradePlan {
   entry: number;
+  entryMin: number;
+  entryMax: number;
+  triggerPrice: number | null;
   stopLoss: number;
   takeProfit1: number;
   takeProfit2: number;
@@ -37,6 +51,8 @@ export interface TradePlan {
   riskAmountUsd: number;
   suggestedPositionUnits: number;
   invalidation: string;
+  entryComment: string;
+  exitComment: string;
 }
 
 export interface AIAnalysis {
@@ -65,6 +81,7 @@ export interface SignalRecord {
   symbol: string;
   timeframe: string;
   signal: SignalType;
+  recommendation: RecommendationType;
   confidence: number;
   score: number;
   price: number;
@@ -72,8 +89,11 @@ export interface SignalRecord {
   regime: MarketRegime;
   setup: SetupType;
   actionable: boolean;
+  headline: string;
+  shortText: string;
   reason: string[];
   indicators: IndicatorSnapshot;
+  market: MarketSnapshot;
   tradePlan: TradePlan | null;
   aiAnalysis: AIAnalysis | null;
 }
@@ -85,6 +105,16 @@ export interface AnalyzerState {
   lastError: string | null;
 }
 
+export interface UniverseState {
+  fetchedAt: string | null;
+  totalSymbols: number;
+  eligibleSymbols: number;
+  analyzedSymbols: number;
+  topSymbols: string[];
+  minTurnoverUsd: number;
+  maxSymbolsToAnalyze: number;
+}
+
 export interface StrategyRule {
   id: string;
   title: string;
@@ -93,8 +123,6 @@ export interface StrategyRule {
 
 export interface AppConfig {
   port: number;
-  symbols: string[];
-  timeframes: string[];
   scanIntervalMs: number;
   bybitCategory: string;
   historyLimit: number;
@@ -103,13 +131,19 @@ export interface AppConfig {
   accountSizeUsd: number;
   riskPerTradePct: number;
   minConfidenceActionable: number;
+  quoteCoin: string;
+  maxSymbolsToAnalyze: number;
+  minTurnover24hUsd: number;
+  maxSpreadPct: number;
   openAiApiKey: string | null;
   openAiModel: string;
   aiAnalysisEnabled: boolean;
   aiAnalyzeHoldSignals: boolean;
+  timeframes: string[];
 }
 
 export interface StoredState {
   signals: SignalRecord[];
   analyzer: AnalyzerState;
+  universe: UniverseState;
 }

@@ -5,5 +5,14 @@
     "isRunning": false,
     "runCount": 0,
     "lastError": null
+  },
+  "universe": {
+    "fetchedAt": null,
+    "totalSymbols": 0,
+    "eligibleSymbols": 0,
+    "analyzedSymbols": 0,
+    "topSymbols": [],
+    "minTurnoverUsd": 2000000,
+    "maxSymbolsToAnalyze": 40
   }
 }

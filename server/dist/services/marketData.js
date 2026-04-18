@@ -10,8 +10,12 @@ const bybitClient = axios_1.default.create({
     baseURL: 'https://api.bybit.com',
     timeout: 15_000
 });
+const toNumber = (value) => {
+    const parsed = Number(value ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+};
 class MarketDataService {
-    async fetchCandles(symbol, interval, limit = 200) {
+    async fetchCandles(symbol, interval, limit = 240) {
         const response = await bybitClient.get('/v5/market/kline', {
             params: {
                 category: config_1.config.bybitCategory,
@@ -34,6 +38,51 @@ class MarketDataService {
             volume: Number(item[5])
         }))
             .sort((left, right) => left.timestamp - right.timestamp);
+    }
+    async fetchUniverse() {
+        const response = await bybitClient.get('/v5/market/tickers', {
+            params: {
+                category: config_1.config.bybitCategory
+            }
+        });
+        const payload = response.data;
+        if (payload.retCode !== 0 || !payload.result?.list) {
+            throw new Error(`Ошибка Bybit при получении списка инструментов: ${payload.retMsg}`);
+        }
+        const totalSymbols = payload.result.list.length;
+        const filtered = payload.result.list
+            .filter((item) => item.symbol.endsWith(config_1.config.quoteCoin))
+            .map((item) => {
+            const lastPrice = toNumber(item.lastPrice);
+            const turnover24hUsd = toNumber(item.turnover24h);
+            const volume24h = toNumber(item.volume24h);
+            const bid = toNumber(item.bid1Price);
+            const ask = toNumber(item.ask1Price);
+            const spreadPct = bid > 0 && ask > 0 ? ((ask - bid) / ((ask + bid) / 2)) * 100 : 999;
+            return {
+                symbol: item.symbol,
+                rank24h: 0,
+                turnover24hUsd,
+                volume24h,
+                spreadPct,
+                lastPrice,
+                fundingRate: item.fundingRate ? toNumber(item.fundingRate) : null
+            };
+        })
+            .filter((item) => item.lastPrice > 0)
+            .filter((item) => item.turnover24hUsd >= config_1.config.minTurnover24hUsd)
+            .filter((item) => item.spreadPct <= config_1.config.maxSpreadPct)
+            .sort((left, right) => right.turnover24hUsd - left.turnover24hUsd)
+            .slice(0, config_1.config.maxSymbolsToAnalyze)
+            .map((item, index) => ({
+            ...item,
+            rank24h: index + 1
+        }));
+        return {
+            totalSymbols,
+            eligibleSymbols: filtered.length,
+            items: filtered
+        };
     }
 }
 exports.MarketDataService = MarketDataService;

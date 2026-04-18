@@ -17,7 +17,7 @@ const createApp = () => {
         response.json({ ok: true, message: 'Сервис работает' });
     });
     app.get('/api', (_request, response) => {
-        response.json({ ok: true, message: 'API сканера рынка с ИИ' });
+        response.json({ ok: true, message: 'API сканера фьючерсного рынка' });
     });
     app.use('/api', routes_1.apiRouter);
     const frontendDistPath = node_path_1.default.resolve(__dirname, '../../webapp/dist');
@@ -27,7 +27,7 @@ const createApp = () => {
             if (error) {
                 response.status(404).json({
                     ok: false,
-                    message: 'Собранный фронтенд не найден. Сначала выполните `npm run build`.'
+                    message: 'Собранный фронтенд не найден. Сначала выполните `npm run build --workspace webapp`.'
                 });
             }
         });

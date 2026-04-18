@@ -1,13 +1,23 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config';
-import { AnalyzerState, SignalRecord, StoredState } from '../types';
+import { AnalyzerState, SignalRecord, StoredState, UniverseState } from '../types';
 
 const defaultAnalyzerState: AnalyzerState = {
   lastRunAt: null,
   isRunning: false,
   runCount: 0,
   lastError: null
+};
+
+const defaultUniverseState: UniverseState = {
+  fetchedAt: null,
+  totalSymbols: 0,
+  eligibleSymbols: 0,
+  analyzedSymbols: 0,
+  topSymbols: [],
+  minTurnoverUsd: config.minTurnover24hUsd,
+  maxSymbolsToAnalyze: config.maxSymbolsToAnalyze
 };
 
 const ensureStorageDir = (): void => {
@@ -19,7 +29,8 @@ const ensureStorageDir = (): void => {
 
 const defaultState = (): StoredState => ({
   signals: [],
-  analyzer: { ...defaultAnalyzerState }
+  analyzer: { ...defaultAnalyzerState },
+  universe: { ...defaultUniverseState }
 });
 
 export class StorageService {
@@ -45,6 +56,10 @@ export class StorageService {
         analyzer: {
           ...defaultAnalyzerState,
           ...(parsed.analyzer ?? {})
+        },
+        universe: {
+          ...defaultUniverseState,
+          ...(parsed.universe ?? {})
         }
       };
     } catch (error) {
@@ -77,6 +92,19 @@ export class StorageService {
     this.state.analyzer = {
       ...this.state.analyzer,
       ...nextState
+    };
+    this.persist();
+  }
+
+  public getUniverseState(): UniverseState {
+    return { ...this.state.universe, topSymbols: [...this.state.universe.topSymbols] };
+  }
+
+  public updateUniverseState(nextState: Partial<UniverseState>): void {
+    this.state.universe = {
+      ...this.state.universe,
+      ...nextState,
+      topSymbols: nextState.topSymbols ? [...nextState.topSymbols] : [...this.state.universe.topSymbols]
     };
     this.persist();
   }

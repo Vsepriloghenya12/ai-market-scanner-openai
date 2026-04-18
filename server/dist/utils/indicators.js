@@ -8,15 +8,9 @@ const average = (values) => {
     }
     return values.reduce((sum, value) => sum + value, 0) / values.length;
 };
-const clamp = (value, min, max) => {
-    return Math.min(max, Math.max(min, value));
-};
-const max = (values) => {
-    return values.length > 0 ? Math.max(...values) : 0;
-};
-const min = (values) => {
-    return values.length > 0 ? Math.min(...values) : 0;
-};
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+const max = (values) => (values.length > 0 ? Math.max(...values) : 0);
+const min = (values) => (values.length > 0 ? Math.min(...values) : 0);
 const calculateEMA = (values, period) => {
     if (values.length === 0) {
         return 0;
@@ -172,64 +166,74 @@ const buildIndicatorSnapshot = (candles) => {
     };
 };
 exports.buildIndicatorSnapshot = buildIndicatorSnapshot;
-const buildTradePlan = (signal, price, indicators) => {
+const buildTradePlan = (recommendation, price, indicators, setup) => {
     const riskAmountUsd = config_1.config.accountSizeUsd * (config_1.config.riskPerTradePct / 100);
-    const minimumRiskDistance = Math.max(indicators.atr * 1.2, price * 0.004);
-    if (riskAmountUsd <= 0 || minimumRiskDistance <= 0 || price <= 0) {
+    const baseRisk = Math.max(indicators.atr * 1.15, price * 0.006);
+    if (riskAmountUsd <= 0 || baseRisk <= 0 || price <= 0) {
         return null;
     }
-    if (signal === 'BUY') {
+    if (recommendation === 'BUY_NOW') {
         const stopCandidates = [
-            price - minimumRiskDistance,
-            indicators.emaMedium - indicators.atr * 0.35,
+            price - baseRisk,
+            indicators.emaMedium - indicators.atr * 0.3,
             indicators.swingLow20 - indicators.atr * 0.15
         ].filter((value) => Number.isFinite(value) && value < price);
-        const stopLoss = stopCandidates.length > 0 ? Math.min(...stopCandidates) : price - minimumRiskDistance;
+        const stopLoss = stopCandidates.length > 0 ? Math.min(...stopCandidates) : price - baseRisk;
         const riskDistance = price - stopLoss;
         if (riskDistance <= 0) {
             return null;
         }
-        const suggestedPositionUnits = riskAmountUsd / riskDistance;
+        const entryPadding = Math.max(indicators.atr * 0.2, price * 0.0025);
         return {
             entry: price,
+            entryMin: Math.max(price - entryPadding, 0),
+            entryMax: price + entryPadding,
+            triggerPrice: setup === 'BREAKOUT' ? indicators.swingHigh20 * 1.001 : null,
             stopLoss,
             takeProfit1: price + riskDistance * 1.5,
             takeProfit2: price + riskDistance * 2.5,
             riskRewardRatio: 2.5,
             riskAmountUsd,
-            suggestedPositionUnits,
-            invalidation: 'Сценарий отменяется, если цена закрепляется ниже EMA50 и локального минимума.'
+            suggestedPositionUnits: riskAmountUsd / riskDistance,
+            invalidation: 'Сценарий ломается, если цена уходит ниже стопа и теряет EMA50.',
+            entryComment: setup === 'BREAKOUT'
+                ? 'Вход по подтверждённому пробою. Не покупать, если цена резко улетела выше зоны входа.'
+                : 'Вход после здорового отката. Лучше брать ближе к зоне входа, а не после резкого пампа.',
+            exitComment: 'На первой цели можно зафиксировать часть позиции, на второй — остаток.'
         };
     }
-    const stopCandidates = [
-        price + minimumRiskDistance,
-        indicators.emaMedium + indicators.atr * 0.35,
-        indicators.swingHigh20 + indicators.atr * 0.15
-    ].filter((value) => Number.isFinite(value) && value > price);
-    const stopLoss = stopCandidates.length > 0 ? Math.max(...stopCandidates) : price + minimumRiskDistance;
-    const riskDistance = stopLoss - price;
-    if (riskDistance <= 0) {
-        return null;
+    if (recommendation === 'WAIT') {
+        const triggerPrice = setup === 'BREAKOUT' ? indicators.swingHigh20 * 1.001 : indicators.emaFast;
+        const entry = triggerPrice > 0 ? triggerPrice : price;
+        const stopLoss = Math.min(indicators.swingLow20 - indicators.atr * 0.15, entry - baseRisk);
+        const riskDistance = entry - stopLoss;
+        if (riskDistance <= 0) {
+            return null;
+        }
+        const entryPadding = Math.max(indicators.atr * 0.2, entry * 0.0025);
+        return {
+            entry,
+            entryMin: Math.max(entry - entryPadding, 0),
+            entryMax: entry + entryPadding,
+            triggerPrice,
+            stopLoss,
+            takeProfit1: entry + riskDistance * 1.5,
+            takeProfit2: entry + riskDistance * 2.5,
+            riskRewardRatio: 2.5,
+            riskAmountUsd,
+            suggestedPositionUnits: riskAmountUsd / riskDistance,
+            invalidation: 'Если цена продолжает слабеть и теряет EMA50, идея отменяется.',
+            entryComment: 'Пока не покупать. Нужно дождаться, пока цена подтвердит вход и не сорвётся обратно.',
+            exitComment: 'Если после входа цена дойдёт до первой цели, часть позиции можно закрыть.'
+        };
     }
-    const suggestedPositionUnits = riskAmountUsd / riskDistance;
-    return {
-        entry: price,
-        stopLoss,
-        takeProfit1: price - riskDistance * 1.5,
-        takeProfit2: price - riskDistance * 2.5,
-        riskRewardRatio: 2.5,
-        riskAmountUsd,
-        suggestedPositionUnits,
-        invalidation: 'Сценарий отменяется, если цена закрепляется выше EMA50 и локального максимума.'
-    };
+    return null;
 };
-const evaluateSignal = (price, indicators) => {
-    const longReasons = [];
-    const shortReasons = [];
-    const commonReasons = [];
-    let longScore = 0;
-    let shortScore = 0;
+const evaluateSignal = (price, indicators, market) => {
+    const reasons = [];
+    let score = 0;
     let regime = 'RANGE';
+    let setup = 'NONE';
     const bullishTrend = price > indicators.emaTrend &&
         indicators.emaFast > indicators.emaMedium &&
         indicators.emaMedium > indicators.emaTrend;
@@ -237,140 +241,141 @@ const evaluateSignal = (price, indicators) => {
         indicators.emaFast < indicators.emaMedium &&
         indicators.emaMedium < indicators.emaTrend;
     const trendStrong = indicators.adx >= 18;
-    const volumeConfirmed = indicators.volumeRatio >= 1.05;
-    const tooVolatile = indicators.volatilityPct > 3.8;
-    const longRsiOk = indicators.rsi >= 52 && indicators.rsi <= 68;
-    const shortRsiOk = indicators.rsi >= 32 && indicators.rsi <= 48;
-    const longMomentumOk = indicators.momentumPct >= 0.35;
-    const shortMomentumOk = indicators.momentumPct <= -0.35;
-    const longBreakout = indicators.swingHigh20 > 0 && price > indicators.swingHigh20 * 1.001;
-    const shortBreakdown = indicators.swingLow20 > 0 && price < indicators.swingLow20 * 0.999;
-    const longExtended = (indicators.atr > 0 && (price - indicators.emaFast) / indicators.atr > 1.8) || indicators.rsi >= 74;
-    const shortExtended = (indicators.atr > 0 && (indicators.emaFast - price) / indicators.atr > 1.8) || indicators.rsi <= 26;
+    const volumeConfirmed = indicators.volumeRatio >= 1.08;
+    const highVolatility = indicators.volatilityPct > 4.2;
+    const longMomentumOk = indicators.momentumPct >= 0.45;
+    const breakout = indicators.swingHigh20 > 0 && price >= indicators.swingHigh20 * 0.999;
+    const pullback = bullishTrend &&
+        price >= indicators.emaFast &&
+        price <= indicators.emaFast + Math.max(indicators.atr * 0.35, price * 0.0035);
+    const tooExtended = (indicators.atr > 0 && (price - indicators.emaFast) / indicators.atr > 2) || indicators.rsi >= 74;
+    const liquidityOk = market.turnover24hUsd >= config_1.config.minTurnover24hUsd;
+    const spreadOk = market.spreadPct <= config_1.config.maxSpreadPct;
     if (bullishTrend) {
         regime = 'BULL';
-        longScore += 2.5;
-        longReasons.push('EMA20 > EMA50 > EMA200 и цена выше EMA200 — тренд восходящий.');
+        score += 2.6;
+        reasons.push('Тренд вверх: EMA20 выше EMA50, EMA50 выше EMA200, цена держится выше EMA200.');
     }
     else if (bearishTrend) {
         regime = 'BEAR';
-        shortScore += 2.5;
-        shortReasons.push('EMA20 < EMA50 < EMA200 и цена ниже EMA200 — тренд нисходящий.');
+        score -= 2.8;
+        reasons.push('Тренд вниз: для нового long это плохой фон.');
     }
     else {
-        commonReasons.push('Структура рынка смешанная: фильтр старшего тренда не подтверждён.');
-        longScore -= 0.5;
-        shortScore -= 0.5;
+        reasons.push('Старший тренд ещё не даёт чистый long-сценарий.');
     }
     if (trendStrong) {
-        if (bullishTrend) {
-            longScore += 1.0;
-            longReasons.push('ADX подтверждает направленное движение, а не боковик.');
-        }
-        if (bearishTrend) {
-            shortScore += 1.0;
-            shortReasons.push('ADX подтверждает направленное движение, а не боковик.');
-        }
+        score += 0.9;
+        reasons.push('ADX подтверждает, что рынок движется, а не стоит в боковике.');
     }
     else {
-        commonReasons.push('ADX ниже рабочего порога — рынок шумный, confidence снижен.');
-        longScore -= 0.7;
-        shortScore -= 0.7;
+        score -= 0.6;
+        reasons.push('Тренд слабый: сейчас больше шума, чем импульса.');
     }
     if (longMomentumOk) {
-        longScore += 0.9;
-        longReasons.push('Импульс положительный, движение не затухает.');
+        score += 0.7;
+        reasons.push('Импульс положительный: движение вверх не затухло.');
     }
-    if (shortMomentumOk) {
-        shortScore += 0.9;
-        shortReasons.push('Импульс отрицательный, снижение подтверждается.');
-    }
-    if (longRsiOk) {
-        longScore += 0.8;
-        longReasons.push('RSI находится в рабочей зоне продолжения роста.');
-    }
-    else if (indicators.rsi > 74) {
-        longScore -= 0.6;
-        longReasons.push('RSI слишком высок: вход в лонг может быть запоздалым.');
-    }
-    if (shortRsiOk) {
-        shortScore += 0.8;
-        shortReasons.push('RSI находится в рабочей зоне продолжения снижения.');
-    }
-    else if (indicators.rsi < 26) {
-        shortScore -= 0.6;
-        shortReasons.push('RSI слишком низок: вход в шорт может быть запоздалым.');
+    else {
+        score -= 0.3;
+        reasons.push('Импульс слабый: рынок пока не показывает уверенного продолжения роста.');
     }
     if (volumeConfirmed) {
-        if (bullishTrend || longMomentumOk) {
-            longScore += 0.6;
-            longReasons.push('Объём выше среднего — участники рынка поддерживают движение.');
-        }
-        if (bearishTrend || shortMomentumOk) {
-            shortScore += 0.6;
-            shortReasons.push('Объём выше среднего — снижение идёт с подтверждением.');
-        }
+        score += 0.6;
+        reasons.push('Объём выше среднего: рост поддержан участниками рынка.');
     }
     else {
-        commonReasons.push('Объём без явного всплеска, пробой может оказаться слабым.');
+        reasons.push('Объём без всплеска: пробой может оказаться ложным.');
     }
-    if (longBreakout) {
-        longScore += 0.8;
-        longReasons.push('Цена обновляет максимум последних 20 свечей.');
+    if (breakout) {
+        score += 0.8;
+        setup = 'BREAKOUT';
+        reasons.push('Цена давит в максимум последних 20 свечей — рынок близок к пробою.');
     }
-    if (shortBreakdown) {
-        shortScore += 0.8;
-        shortReasons.push('Цена обновляет минимум последних 20 свечей.');
+    else if (pullback) {
+        score += 0.55;
+        setup = 'PULLBACK';
+        reasons.push('Цена держится рядом с EMA20: это может быть аккуратный вход после отката.');
     }
-    if (tooVolatile) {
-        longScore -= 0.8;
-        shortScore -= 0.8;
-        commonReasons.push('Волатильность выше комфортной: размер позиции нужно уменьшать.');
+    if (indicators.rsi >= 53 && indicators.rsi <= 68) {
+        score += 0.55;
+        reasons.push('RSI в рабочей зоне для продолжения роста.');
     }
-    if (longExtended) {
-        longScore -= 1.0;
-        longReasons.push('Лонг перегрет: цена слишком далеко ушла от EMA20/ATR.');
+    else if (indicators.rsi > 74) {
+        score -= 0.95;
+        reasons.push('RSI слишком высокий: покупать сейчас опасно, движение может быть перегретым.');
     }
-    if (shortExtended) {
-        shortScore -= 1.0;
-        shortReasons.push('Шорт перегрет: цена слишком далеко ушла от EMA20/ATR.');
+    else if (indicators.rsi < 48) {
+        score -= 0.4;
+        reasons.push('RSI пока слабоват для сильного long-продолжения.');
     }
+    if (!liquidityOk) {
+        score -= 1.2;
+        reasons.push('Оборот монеты низкий для надёжной идеи по фьючерсам.');
+    }
+    if (!spreadOk) {
+        score -= 1.0;
+        reasons.push('Спред слишком широкий: вход может оказаться дорогим.');
+    }
+    if (highVolatility) {
+        score -= 0.8;
+        reasons.push('Волатильность слишком высокая: риск выбивания по стопу повышен.');
+    }
+    if (tooExtended) {
+        score -= 1.0;
+        reasons.push('Цена уже сильно улетела от своей базы: лучше не догонять свечу.');
+    }
+    const confidence = clamp(0.34 + score / 8.6, 0.15, 0.95);
     let signal = 'HOLD';
-    let score = 0;
-    let reason = commonReasons;
-    let setup = 'NONE';
-    if (longScore >= 4.4 && longScore - shortScore >= 1.0) {
+    let recommendation = 'WAIT';
+    let headline = 'Пока лучше подождать';
+    let shortText = 'Идея на рост ещё не готова. Система предлагает наблюдать и ждать подтверждения.';
+    const actionable = bullishTrend &&
+        trendStrong &&
+        volumeConfirmed &&
+        !highVolatility &&
+        !tooExtended &&
+        confidence >= config_1.config.minConfidenceActionable &&
+        (breakout || pullback);
+    if (actionable) {
         signal = 'BUY';
-        score = longScore;
-        reason = [...longReasons, ...commonReasons];
-        setup = longBreakout ? 'TREND_BREAKOUT' : 'TREND_PULLBACK';
+        recommendation = 'BUY_NOW';
+        headline = 'Купить фьючерс long сейчас';
+        shortText =
+            setup === 'BREAKOUT'
+                ? 'Монета выглядит сильнее рынка и уже подтверждает пробой. Это одна из лучших long-идей сейчас.'
+                : 'Монета держит восходящий тренд и даёт аккуратный вход после отката. Это рабочая long-идея.';
     }
-    else if (shortScore >= 4.4 && shortScore - longScore >= 1.0) {
+    else if (bearishTrend || confidence < 0.36) {
         signal = 'SELL';
-        score = -shortScore;
-        reason = [...shortReasons, ...commonReasons];
-        setup = 'BREAKDOWN';
+        recommendation = 'EXIT';
+        setup = bearishTrend ? 'BREAKDOWN' : 'NONE';
+        headline = 'Не покупать. Если long уже открыт — думать о выходе';
+        shortText =
+            'Система не видит здесь здоровой точки входа в рост. Новую покупку лучше не открывать, а старый long контролировать жёстче.';
     }
     else {
-        score = longScore >= shortScore ? longScore : -shortScore;
-        reason = longScore >= shortScore ? [...longReasons, ...commonReasons] : [...shortReasons, ...commonReasons];
+        signal = bullishTrend ? 'BUY' : 'HOLD';
+        recommendation = 'WAIT';
+        headline = 'Ждать подтверждения';
+        shortText =
+            setup === 'BREAKOUT'
+                ? 'Монета интересная, но лучше дождаться уверенного закрепления выше триггера.'
+                : 'Потенциал роста есть, но точка входа ещё не стала чистой. Пока безопаснее ждать.';
     }
-    const dominantScore = signal === 'BUY' ? longScore : signal === 'SELL' ? shortScore : Math.max(longScore, shortScore);
-    const confidence = clamp(0.32 + dominantScore / 8.5, 0.2, 0.93);
-    const actionable = signal !== 'HOLD' &&
-        trendStrong &&
-        confidence >= config_1.config.minConfidenceActionable &&
-        !tooVolatile;
-    const tradePlan = actionable && signal !== 'HOLD' ? buildTradePlan(signal, price, indicators) : null;
+    const tradePlan = buildTradePlan(recommendation, price, indicators, setup);
     return {
-        signal: actionable ? signal : 'HOLD',
+        signal,
+        recommendation,
         confidence,
         score,
-        reason,
+        reason: reasons,
         regime,
-        setup: actionable ? setup : 'NONE',
+        setup,
         actionable,
-        tradePlan
+        tradePlan,
+        headline,
+        shortText
     };
 };
 exports.evaluateSignal = evaluateSignal;

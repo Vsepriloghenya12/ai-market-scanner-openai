@@ -5,8 +5,21 @@ export interface AnalyzerState {
   lastError: string | null;
 }
 
+export interface UniverseState {
+  fetchedAt: string | null;
+  totalSymbols: number;
+  eligibleSymbols: number;
+  analyzedSymbols: number;
+  topSymbols: string[];
+  minTurnoverUsd: number;
+  maxSymbolsToAnalyze: number;
+}
+
 export interface TradePlan {
   entry: number;
+  entryMin: number;
+  entryMax: number;
+  triggerPrice: number | null;
   stopLoss: number;
   takeProfit1: number;
   takeProfit2: number;
@@ -14,6 +27,8 @@ export interface TradePlan {
   riskAmountUsd: number;
   suggestedPositionUnits: number;
   invalidation: string;
+  entryComment: string;
+  exitComment: string;
 }
 
 export interface AIAnalysis {
@@ -42,13 +57,16 @@ export interface SignalItem {
   symbol: string;
   timeframe: string;
   signal: 'BUY' | 'SELL' | 'HOLD';
+  recommendation: 'BUY_NOW' | 'WAIT' | 'EXIT';
   confidence: number;
   score: number;
   price: number;
   createdAt: string;
   regime: 'BULL' | 'BEAR' | 'RANGE';
-  setup: 'TREND_BREAKOUT' | 'TREND_PULLBACK' | 'BREAKDOWN' | 'NONE';
+  setup: 'BREAKOUT' | 'PULLBACK' | 'BREAKDOWN' | 'NONE';
   actionable: boolean;
+  headline: string;
+  shortText: string;
   reason: string[];
   indicators: {
     emaFast: number;
@@ -64,6 +82,15 @@ export interface SignalItem {
     swingLow20: number;
     trendGapPct: number;
   };
+  market: {
+    symbol: string;
+    rank24h: number;
+    turnover24hUsd: number;
+    volume24h: number;
+    spreadPct: number;
+    lastPrice: number;
+    fundingRate: number | null;
+  };
   tradePlan: TradePlan | null;
   aiAnalysis: AIAnalysis | null;
 }
@@ -71,15 +98,13 @@ export interface SignalItem {
 export interface OverviewResponse {
   summary: {
     total: number;
-    BUY: number;
-    SELL: number;
-    HOLD: number;
-    actionable: number;
+    BUY_NOW: number;
+    WAIT: number;
+    EXIT: number;
     aiReady: number;
   };
   analyzer: AnalyzerState;
-  trackedSymbols: string[];
-  trackedTimeframes: string[];
+  universe: UniverseState;
   risk: {
     accountSizeUsd: number;
     riskPerTradePct: number;
@@ -92,22 +117,14 @@ export interface OverviewResponse {
     model: string;
     analyzeHoldSignals: boolean;
   };
+  timeframes: string[];
 }
 
-export interface StrategyResponse {
-  rules: Array<{
-    id: string;
-    title: string;
-    description: string;
-  }>;
-  meta: {
-    adxThreshold: number;
-    highVolatilityThresholdPct: number;
-    rewardTargetsR: number[];
-    accountSizeUsd: number;
-    riskPerTradePct: number;
-    minConfidenceActionable: number;
-  };
+export interface OpportunitiesResponse {
+  bestIdea: SignalItem | null;
+  buyNow: SignalItem[];
+  wait: SignalItem[];
+  exit: SignalItem[];
 }
 
 const request = async <T>(path: string): Promise<T> => {
@@ -120,9 +137,8 @@ const request = async <T>(path: string): Promise<T> => {
 
 export const api = {
   getOverview: () => request<OverviewResponse>('/api/overview'),
-  getLatestSignals: () => request<{ items: SignalItem[] }>('/api/signals/latest'),
+  getOpportunities: () => request<OpportunitiesResponse>('/api/opportunities'),
   getSignals: (limit = 100) => request<{ items: SignalItem[] }>(`/api/signals?limit=${limit}`),
   getHealth: () => request<{ analyzer: AnalyzerState; config: Record<string, unknown> }>('/api/health'),
-  getStrategy: () => request<StrategyResponse>('/api/strategy'),
   getAiStatus: () => request<OverviewResponse['ai']>('/api/ai/status')
 };

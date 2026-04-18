@@ -6,9 +6,10 @@ const scheduler_1 = require("./services/scheduler");
 const app = (0, app_1.createApp)();
 const host = '0.0.0.0';
 app.listen(config_1.config.port, host, () => {
-    console.log(`Сервер сканера рынка с ИИ запущен на ${host}:${config_1.config.port}`);
-    console.log(`Отслеживаемые инструменты: ${config_1.config.symbols.join(', ')}`);
-    console.log(`Отслеживаемые таймфреймы: ${config_1.config.timeframes.join(', ')}`);
+    console.log(`Сервер сканера фьючерсов запущен на ${host}:${config_1.config.port}`);
+    console.log(`Режим рынка: ${config_1.config.bybitCategory}, котировка: ${config_1.config.quoteCoin}`);
+    console.log(`Таймфреймы: ${config_1.config.timeframes.join(', ')}`);
+    console.log(`Сканируем до ${config_1.config.maxSymbolsToAnalyze} ликвидных монет за цикл.`);
     setTimeout(() => {
         scheduler_1.schedulerService.start();
     }, 3000);

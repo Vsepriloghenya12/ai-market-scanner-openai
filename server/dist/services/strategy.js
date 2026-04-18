@@ -4,41 +4,45 @@ exports.strategyMeta = exports.strategyRules = void 0;
 const config_1 = require("../config");
 exports.strategyRules = [
     {
-        id: 'trend-filter',
-        title: 'Торговать только по структуре рынка',
-        description: 'BUY допускается, когда EMA20 > EMA50 > EMA200 и цена находится выше EMA200. SELL — зеркально в нисходящем тренде.'
+        id: 'universe-filter',
+        title: 'Сначала отбирать ликвидные фьючерсы',
+        description: 'Сканер не тратит время на тонкий мусорный рынок. В анализ попадают только USDT-фьючерсы с достаточным оборотом и нормальным спредом.'
     },
     {
-        id: 'trend-strength',
-        title: 'Избегать боковика',
-        description: 'Сигнал усиливается только при ADX выше порога. При слабом тренде система предпочитает HOLD и не навязывает вход.'
+        id: 'trend-filter',
+        title: 'Искать монеты только на рост',
+        description: 'Главный сценарий — long по тренду. Сильный сетап возможен, когда EMA20 > EMA50 > EMA200 и цена держится выше EMA200.'
+    },
+    {
+        id: 'breakout-or-pullback',
+        title: 'Покупать либо пробой, либо аккуратный откат',
+        description: 'Система ищет два понятных сценария: пробой максимума последних свечей на объёме или вход после здорового отката к EMA20/EMA50.'
     },
     {
         id: 'momentum-volume',
-        title: 'Подтверждать импульс и объём',
-        description: 'Продолжение тренда требует положительного моментума и объёма выше среднего. Без подтверждения от рынка confidence снижается.'
+        title: 'Без объёма и импульса вход не подтверждён',
+        description: 'Даже хороший тренд без объёма и импульса остаётся только идеей для наблюдения. Статус “Покупать сейчас” появляется только после подтверждения рынком.'
     },
     {
-        id: 'rsi-zone',
-        title: 'Не гнаться за перегретым движением',
-        description: 'Для трендового BUY RSI должен быть в рабочей зоне продолжения, но не в перегреве. Для SELL — зеркальная логика.'
+        id: 'risk-first',
+        title: 'Сначала риск, потом прибыль',
+        description: 'Стоп и цели считаются от ATR и рыночной структуры. Размер позиции считается от риска на сделку, а не от желания зайти “побольше”.'
     },
     {
-        id: 'atr-risk',
-        title: 'Стоп и цели считать от волатильности',
-        description: 'Стоп-лосс строится через ATR и рыночную структуру. Цели задаются как 1.5R и 2.5R, чтобы сохранить положительное отношение риск/прибыль.'
-    },
-    {
-        id: 'fixed-risk',
-        title: 'Риск на сделку должен быть фиксирован',
-        description: 'Размер позиции рассчитывается от процента риска на сделку, а не от эмоций или желания увеличить прибыль.'
+        id: 'simple-output',
+        title: 'Для пользователя — только простое действие',
+        description: 'На экране показывается не набор индикаторов, а готовый план: купить сейчас, ждать или выходить из уже открытого long.'
     }
 ];
 exports.strategyMeta = {
     adxThreshold: 18,
-    highVolatilityThresholdPct: 3.8,
+    highVolatilityThresholdPct: 4.2,
     rewardTargetsR: [1.5, 2.5],
     accountSizeUsd: config_1.config.accountSizeUsd,
     riskPerTradePct: config_1.config.riskPerTradePct,
-    minConfidenceActionable: config_1.config.minConfidenceActionable
+    minConfidenceActionable: config_1.config.minConfidenceActionable,
+    maxSymbolsToAnalyze: config_1.config.maxSymbolsToAnalyze,
+    minTurnover24hUsd: config_1.config.minTurnover24hUsd,
+    maxSpreadPct: config_1.config.maxSpreadPct,
+    quoteCoin: config_1.config.quoteCoin
 };
