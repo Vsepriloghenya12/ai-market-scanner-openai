@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AIAnalysis, api, OverviewResponse, SignalItem, StrategyResponse } from './api';
+import { AIAnalysis, api, OverviewResponse, SignalItem } from './api';
+
+type CardMode = 'BUY_NOW' | 'WAIT' | 'SELL';
+
+interface RecommendationMeta {
+  mode: CardMode;
+  title: string;
+  subtitle: string;
+  actionText: string;
+  exitText: string;
+  badgeText: string;
+  badgeClassName: string;
+}
 
 const formatDateTime = (value: string | null): string => {
   if (!value) {
@@ -18,64 +30,229 @@ const formatNumber = (value: number, maximumFractionDigits = 4): string => {
   }).format(value);
 };
 
-const signalClassName = (signal: SignalItem['signal']): string => {
-  if (signal === 'BUY') {
-    return 'signal signal-buy';
+const formatPrice = (value: number): string => {
+  if (value >= 1000) {
+    return formatNumber(value, 2);
   }
-  if (signal === 'SELL') {
-    return 'signal signal-sell';
+  if (value >= 1) {
+    return formatNumber(value, 4);
   }
-  return 'signal signal-hold';
+  return formatNumber(value, 6);
 };
 
-const aiStatusClassName = (status: AIAnalysis['status']): string => {
-  if (status === 'READY') {
-    return 'soft-pill pill-blue';
+const formatPercent = (value: number): string => `${Math.round(value * 100)}%`;
+
+const timeframeLabel = (value: string): string => {
+  const numeric = Number(value);
+  if (!Number.isNaN(numeric)) {
+    if (numeric < 60) {
+      return `${numeric} мин`;
+    }
+    if (numeric % 60 === 0) {
+      const hours = numeric / 60;
+      return hours === 1 ? '1 час' : `${hours} часа`;
+    }
   }
-  if (status === 'ERROR') {
-    return 'soft-pill pill-red';
+
+  if (value === 'D') {
+    return '1 день';
   }
-  return 'soft-pill';
+
+  if (value === 'W') {
+    return '1 неделя';
+  }
+
+  return value;
 };
 
-const signalLabel: Record<SignalItem['signal'], string> = {
-  BUY: 'Покупка',
-  SELL: 'Продажа',
-  HOLD: 'Ожидание'
-};
+const symbolLabel = (symbol: string): string => (symbol === 'ALL' ? 'Все монеты' : symbol);
 
 const aiStatusLabel: Record<AIAnalysis['status'], string> = {
-  READY: 'Разбор готов',
-  SKIPPED: 'Разбор пропущен',
+  READY: 'ИИ разбор готов',
+  SKIPPED: 'ИИ пропущен',
   ERROR: 'Ошибка ИИ'
 };
 
-const alignmentLabel: Record<AIAnalysis['alignmentWithRules'], string> = {
-  ALIGNED: 'ИИ согласен с правилами',
-  MIXED: 'ИИ видит смешанный сценарий',
-  CONTRARIAN: 'ИИ расходится с правилами'
+const modeLabel = (mode: CardMode): string => {
+  if (mode === 'BUY_NOW') {
+    return 'Покупать сейчас';
+  }
+  if (mode === 'SELL') {
+    return 'Если уже купили — продавать';
+  }
+  return 'Ждать';
 };
 
-const regimeLabel: Record<SignalItem['regime'], string> = {
-  BULL: 'Восходящий тренд',
-  BEAR: 'Нисходящий тренд',
-  RANGE: 'Боковой рынок'
+const getRecommendationMeta = (item: SignalItem): RecommendationMeta => {
+  if (item.signal === 'BUY' && item.actionable && item.tradePlan) {
+    return {
+      mode: 'BUY_NOW',
+      title: 'Покупать сейчас',
+      subtitle: 'Сигнал подтверждён правилами стратегии и прошёл риск-фильтр.',
+      actionText: `Покупка около ${formatPrice(item.tradePlan.entry)}.`,
+      exitText: `Часть позиции можно закрыть около ${formatPrice(item.tradePlan.takeProfit1)}, остаток — около ${formatPrice(item.tradePlan.takeProfit2)}. Защита идеи: ${formatPrice(item.tradePlan.stopLoss)}.`,
+      badgeText: 'Покупать',
+      badgeClassName: 'status-badge-buy'
+    };
+  }
+
+  if (item.signal === 'SELL') {
+    return {
+      mode: 'SELL',
+      title: 'Если уже купили — продавать',
+      subtitle: 'Для новичка это не вход в шорт, а сигнал не покупать заново и подумать о выходе из уже купленной монеты.',
+      actionText: 'Новые покупки сейчас не делать.',
+      exitText: item.tradePlan
+        ? `Если монета уже куплена, думать о сокращении или выходе. Ближайшие уровни: ${formatPrice(item.tradePlan.takeProfit1)} и ${formatPrice(item.tradePlan.takeProfit2)}. Стоп-контроль: ${formatPrice(item.tradePlan.stopLoss)}.`
+        : 'Если монета уже куплена, не усреднять и не докупать. Лучше дождаться нового сигнала на покупку.',
+      badgeText: 'Продавать',
+      badgeClassName: 'status-badge-sell'
+    };
+  }
+
+  return {
+    mode: 'WAIT',
+    title: 'Ждать',
+    subtitle: 'Идея ещё не готова для входа или рынок слишком слабый.',
+    actionText: item.tradePlan
+      ? `Следить за зоной около ${formatPrice(item.tradePlan.entry)} и ждать подтверждения.`
+      : 'Сейчас лучше не входить. Ждать следующего обновления и более сильного сигнала.',
+    exitText: 'Пока ничего не покупать и ничего не продавать, если позиции ещё нет.',
+    badgeText: 'Ждать',
+    badgeClassName: 'status-badge-wait'
+  };
 };
 
-const setupLabel: Record<SignalItem['setup'], string> = {
-  TREND_BREAKOUT: 'Пробой по тренду',
-  TREND_PULLBACK: 'Продолжение тренда',
-  BREAKDOWN: 'Пробой вниз',
-  NONE: 'Сетап не подтверждён'
+const compactReasonList = (item: SignalItem): string[] => {
+  const fromAi = item.aiAnalysis?.strengths?.filter(Boolean) ?? [];
+  const fromRules = item.reason.filter(Boolean);
+  const joined = [...fromAi, ...fromRules];
+  return joined.slice(0, 3);
 };
 
-const symbolLabel = (symbol: string): string => {
-  return symbol === 'ALL' ? 'Все инструменты' : symbol;
+const shortExplanation = (item: SignalItem): string => {
+  if (item.aiAnalysis?.summary) {
+    return item.aiAnalysis.summary;
+  }
+  if (item.reason.length > 0) {
+    return item.reason[0];
+  }
+  return 'Сигнал сформирован, но короткое пояснение пока отсутствует.';
 };
+
+function RecommendationCard({ item }: { item: SignalItem }) {
+  const meta = getRecommendationMeta(item);
+  const reasons = compactReasonList(item);
+
+  return (
+    <article className="recommendation-card">
+      <div className="card-topline">
+        <div>
+          <div className="coin-line">
+            <h3>{item.symbol}</h3>
+            <span className="timeframe-pill">{timeframeLabel(item.timeframe)}</span>
+          </div>
+          <p className="card-subtitle">{meta.subtitle}</p>
+        </div>
+        <span className={`status-badge ${meta.badgeClassName}`}>{meta.badgeText}</span>
+      </div>
+
+      <div className="price-line">
+        <span className="label">Текущая цена</span>
+        <strong>{formatPrice(item.price)}</strong>
+      </div>
+
+      <div className="plain-plan-box plain-plan-primary">
+        <span className="plain-plan-label">Что делать</span>
+        <strong>{meta.title}</strong>
+        <p>{meta.actionText}</p>
+      </div>
+
+      <div className="plain-plan-box">
+        <span className="plain-plan-label">Когда продавать</span>
+        <p>{meta.exitText}</p>
+      </div>
+
+      {item.tradePlan ? (
+        <div className="levels-grid">
+          <div className="level-card">
+            <span className="label">Покупка</span>
+            <strong>{formatPrice(item.tradePlan.entry)}</strong>
+          </div>
+          <div className="level-card">
+            <span className="label">Стоп</span>
+            <strong>{formatPrice(item.tradePlan.stopLoss)}</strong>
+          </div>
+          <div className="level-card">
+            <span className="label">Продажа 1</span>
+            <strong>{formatPrice(item.tradePlan.takeProfit1)}</strong>
+          </div>
+          <div className="level-card">
+            <span className="label">Продажа 2</span>
+            <strong>{formatPrice(item.tradePlan.takeProfit2)}</strong>
+          </div>
+        </div>
+      ) : (
+        <div className="notice-box">Чёткий уровень входа пока не дан. Значит приложение советует только наблюдать.</div>
+      )}
+
+      <div className="explanation-box">
+        <span className="label">Почему так</span>
+        <p>{shortExplanation(item)}</p>
+      </div>
+
+      {reasons.length > 0 ? (
+        <ul className="reason-list beginner-list">
+          {reasons.map((reason) => (
+            <li key={`${item.id}-${reason}`}>{reason}</li>
+          ))}
+        </ul>
+      ) : null}
+
+      <div className="meta-row">
+        <span>Уверенность: {formatPercent(item.confidence)}</span>
+        <span>Обновлено: {formatDateTime(item.createdAt)}</span>
+      </div>
+
+      <details className="advanced-box">
+        <summary>Показать подробности</summary>
+
+        <div className="advanced-grid">
+          <div>
+            <span className="label">Сигнал движка</span>
+            <strong>{modeLabel(meta.mode)}</strong>
+          </div>
+          <div>
+            <span className="label">RSI</span>
+            <strong>{formatNumber(item.indicators.rsi, 2)}</strong>
+          </div>
+          <div>
+            <span className="label">ADX</span>
+            <strong>{formatNumber(item.indicators.adx, 2)}</strong>
+          </div>
+          <div>
+            <span className="label">Объём / средний</span>
+            <strong>{formatNumber(item.indicators.volumeRatio, 2)}x</strong>
+          </div>
+        </div>
+
+        {item.aiAnalysis ? (
+          <div className="ai-box">
+            <div className="ai-box-head">
+              <strong>{aiStatusLabel[item.aiAnalysis.status]}</strong>
+              <span>{formatDateTime(item.aiAnalysis.generatedAt)}</span>
+            </div>
+            <p>{item.aiAnalysis.marketNarrative}</p>
+            <p className="muted-text">Следующее действие: {item.aiAnalysis.nextAction}</p>
+          </div>
+        ) : null}
+      </details>
+    </article>
+  );
+}
 
 export default function App() {
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
-  const [strategy, setStrategy] = useState<StrategyResponse | null>(null);
   const [latestSignals, setLatestSignals] = useState<SignalItem[]>([]);
   const [historySignals, setHistorySignals] = useState<SignalItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,15 +261,13 @@ export default function App() {
 
   const loadData = useCallback(async () => {
     try {
-      const [overviewResponse, strategyResponse, latestResponse, historyResponse] = await Promise.all([
+      const [overviewResponse, latestResponse, historyResponse] = await Promise.all([
         api.getOverview(),
-        api.getStrategy(),
         api.getLatestSignals(),
-        api.getSignals(120)
+        api.getSignals(60)
       ]);
 
       setOverview(overviewResponse);
-      setStrategy(strategyResponse);
       setLatestSignals(latestResponse.items);
       setHistorySignals(historyResponse.items);
       setError(null);
@@ -122,144 +297,99 @@ export default function App() {
     return historySignals.filter((item) => (selectedSymbol === 'ALL' ? true : item.symbol === selectedSymbol));
   }, [historySignals, selectedSymbol]);
 
-  return (
-    <div className="page-shell">
-      <div className="background-orb orb-1" />
-      <div className="background-orb orb-2" />
+  const grouped = useMemo(() => {
+    const buyNow = filteredLatestSignals
+      .filter((item) => getRecommendationMeta(item).mode === 'BUY_NOW')
+      .sort((left, right) => right.confidence - left.confidence);
 
-      <main className="container">
-        <section className="hero-card">
+    const wait = filteredLatestSignals
+      .filter((item) => getRecommendationMeta(item).mode === 'WAIT')
+      .sort((left, right) => right.confidence - left.confidence);
+
+    const sell = filteredLatestSignals
+      .filter((item) => getRecommendationMeta(item).mode === 'SELL')
+      .sort((left, right) => right.confidence - left.confidence);
+
+    return { buyNow, wait, sell };
+  }, [filteredLatestSignals]);
+
+  const bestIdea = useMemo(() => {
+    return grouped.buyNow[0] ?? grouped.wait[0] ?? grouped.sell[0] ?? null;
+  }, [grouped]);
+
+  return (
+    <div className="app-shell">
+      <main className="page">
+        <section className="hero-panel">
           <div>
-            <p className="eyebrow">Русский сканер рынка с ИИ</p>
-            <h1>Стратегия считает рынок, а ИИ даёт второй слой разбора</h1>
-            <p className="hero-copy">
-              Приложение постоянно сканирует рынок по правилам тренда и риска, а при наличии ключа OpenAI
-              добавляет к каждому сигналу понятный текстовый разбор: что подтверждает идею, где слабые места,
-              как относиться к входу и когда сценарий отменяется.
+            <p className="eyebrow">Простая версия для новичка</p>
+            <h1>Что купить и когда продать</h1>
+            <p className="hero-text">
+              Приложение теперь показывает не сложные индикаторы, а готовый план простыми словами: покупать
+              сейчас, ждать или не покупать. Для каждой монеты есть понятные уровни покупки, стоп и две цели
+              продажи.
             </p>
           </div>
-          <div className="hero-status">
-            <div className="status-badge">
-              <span className={overview?.analyzer.isRunning ? 'dot live' : 'dot'} />
-              {overview?.analyzer.isRunning ? 'Сканирование рынка выполняется' : 'Ожидание следующего цикла'}
+          <div className="hero-side">
+            <div className="hero-stat">
+              <span className={overview?.analyzer.isRunning ? 'live-dot active' : 'live-dot'} />
+              {overview?.analyzer.isRunning ? 'Рынок сканируется сейчас' : 'Ожидание следующей проверки'}
             </div>
-            <div className="status-meta">Последний запуск: {formatDateTime(overview?.analyzer.lastRunAt ?? null)}</div>
-            <div className="status-meta">Всего циклов анализа: {overview?.analyzer.runCount ?? 0}</div>
-            <div className="status-meta">
-              Риск на сделку: {formatNumber(overview?.risk.riskPerTradePct ?? 0, 2)}% от{' '}
-              {formatNumber(overview?.risk.accountSizeUsd ?? 0, 0)} USD
-            </div>
-            <div className="status-meta">
-              Порог сильного сигнала: {Math.round((overview?.risk.minConfidenceActionable ?? 0) * 100)}%
-            </div>
-            <div className="status-meta">
-              ИИ-разбор: {overview?.ai.ready ? `включён (${overview.ai.model})` : 'не готов'}
-            </div>
-            <div className="status-meta error-text">Последняя ошибка: {overview?.analyzer.lastError ?? 'нет'}</div>
+            <div className="hero-meta">Последняя проверка: {formatDateTime(overview?.analyzer.lastRunAt ?? null)}</div>
+            <div className="hero-meta">Монет в списке: {overview?.trackedSymbols.length ?? 0}</div>
+            <div className="hero-meta">Таймфреймов: {overview?.trackedTimeframes.length ?? 0}</div>
           </div>
         </section>
 
-        {loading ? <div className="panel">Загрузка данных…</div> : null}
-        {error ? <div className="panel error-panel">Ошибка: {error}</div> : null}
+        {loading ? <section className="panel">Загрузка данных…</section> : null}
+        {error ? <section className="panel error-panel">Ошибка: {error}</section> : null}
 
-        <section className="stats-grid stats-grid-6">
-          <article className="stat-card">
-            <span className="stat-label">Всего сигналов</span>
-            <strong>{overview?.summary.total ?? 0}</strong>
+        <section className="stats-row">
+          <article className="small-stat">
+            <span>Покупать сейчас</span>
+            <strong>{grouped.buyNow.length}</strong>
           </article>
-          <article className="stat-card">
-            <span className="stat-label">Покупка</span>
-            <strong>{overview?.summary.BUY ?? 0}</strong>
+          <article className="small-stat">
+            <span>Ждать</span>
+            <strong>{grouped.wait.length}</strong>
           </article>
-          <article className="stat-card">
-            <span className="stat-label">Продажа</span>
-            <strong>{overview?.summary.SELL ?? 0}</strong>
+          <article className="small-stat">
+            <span>Если уже купили — продавать</span>
+            <strong>{grouped.sell.length}</strong>
           </article>
-          <article className="stat-card">
-            <span className="stat-label">Ожидание</span>
-            <strong>{overview?.summary.HOLD ?? 0}</strong>
-          </article>
-          <article className="stat-card">
-            <span className="stat-label">Сильные сигналы</span>
-            <strong>{overview?.summary.actionable ?? 0}</strong>
-          </article>
-          <article className="stat-card">
-            <span className="stat-label">Разобрано ИИ</span>
-            <strong>{overview?.summary.aiReady ?? 0}</strong>
+          <article className="small-stat">
+            <span>Риск на одну идею</span>
+            <strong>{formatNumber(overview?.risk.riskPerTradePct ?? 0, 2)}%</strong>
           </article>
         </section>
 
-        <section className="panel ai-panel">
+        <section className="panel best-idea-panel">
           <div className="section-head">
             <div>
-              <h2>Слой ИИ в приложении</h2>
-              <p className="muted">Серверный анализ OpenAI поверх стратегического движка</p>
-            </div>
-            <div className="strategy-meta">{overview?.ai.model ?? '—'}</div>
-          </div>
-          <div className="ai-summary-grid">
-            <div className="rule-card">
-              <h3>Статус</h3>
-              <p className="muted">
-                {overview?.ai.ready
-                  ? 'OpenAI подключён, и новые сигналы автоматически получают разбор от ИИ.'
-                  : overview?.ai.configured
-                    ? 'Ключ есть, но слой ИИ отключён переменной AI_ANALYSIS_ENABLED.'
-                    : 'Добавьте OPENAI_API_KEY в Railway, чтобы включить разбор сигналов от ИИ.'}
-              </p>
-            </div>
-            <div className="rule-card">
-              <h3>Что делает ИИ</h3>
-              <p className="muted">
-                Он не считает рынок с нуля, а оценивает уже готовый снимок рынка: подтверждает или охлаждает идею,
-                выделяет риски и объясняет сценарий входа и выхода.
-              </p>
-            </div>
-            <div className="rule-card">
-              <h3>Режим ожидания</h3>
-              <p className="muted">
-                {overview?.ai.analyzeHoldSignals
-                  ? 'ИИ анализирует даже сигналы ожидания.'
-                  : 'По умолчанию сигналы ожидания пропускаются, чтобы не тратить токены на рыночный шум.'}
-              </p>
+              <h2>Главная подсказка сейчас</h2>
+              <p className="muted-text">Если не хотите смотреть всё подряд, начните с этого блока.</p>
             </div>
           </div>
+          {bestIdea ? (
+            <RecommendationCard item={bestIdea} />
+          ) : (
+            <div className="empty-box">Пока нет готовых сигналов. Дождитесь следующего обновления рынка.</div>
+          )}
         </section>
 
-        <section className="panel">
+        <section className="panel filter-panel">
           <div className="section-head">
             <div>
-              <h2>Правила стратегии</h2>
-              <p className="muted">То, что реально зашито в движок сигналов</p>
+              <h2>Выбор монеты</h2>
+              <p className="muted-text">Можно смотреть все монеты сразу или выбрать одну.</p>
             </div>
-            {strategy ? (
-              <div className="strategy-meta">
-                ADX ≥ {strategy.meta.adxThreshold} · цели {strategy.meta.rewardTargetsR.join('R / ')}R
-              </div>
-            ) : null}
           </div>
-
-          <div className="rule-grid">
-            {(strategy?.rules ?? []).map((rule) => (
-              <article key={rule.id} className="rule-card">
-                <h3>{rule.title}</h3>
-                <p className="muted">{rule.description}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="toolbar panel">
-          <div>
-            <h2>Фильтр</h2>
-            <p className="muted">Отбор по инструменту</p>
-          </div>
-          <div className="symbol-tabs">
+          <div className="tab-row">
             {symbols.map((symbol) => (
               <button
                 key={symbol}
                 type="button"
-                className={selectedSymbol === symbol ? 'tab active' : 'tab'}
+                className={selectedSymbol === symbol ? 'tab-button active' : 'tab-button'}
                 onClick={() => setSelectedSymbol(symbol)}
               >
                 {symbolLabel(symbol)}
@@ -271,245 +401,108 @@ export default function App() {
         <section className="panel">
           <div className="section-head">
             <div>
-              <h2>Последние сигналы</h2>
-              <p className="muted">По одному последнему сигналу на каждый символ и таймфрейм</p>
+              <h2>Покупать сейчас</h2>
+              <p className="muted-text">Здесь только монеты, где вход уже подтверждён.</p>
             </div>
           </div>
-          <div className="latest-grid">
-            {filteredLatestSignals.length === 0 ? (
-              <div className="empty-state">
-                Пока нет сигналов. После первого успешного цикла анализа карточки появятся здесь.
-              </div>
-            ) : null}
-            {filteredLatestSignals.map((item) => (
-              <article key={item.id} className="latest-card">
-                <div className="latest-topline">
-                  <div>
-                    <h3>{item.symbol}</h3>
-                    <p className="muted">
-                      Таймфрейм {item.timeframe} · {regimeLabel[item.regime]}
-                    </p>
-                  </div>
-                  <span className={signalClassName(item.signal)}>{signalLabel[item.signal]}</span>
-                </div>
+          {grouped.buyNow.length === 0 ? (
+            <div className="empty-box">Сейчас приложение не видит хорошего входа на покупку.</div>
+          ) : (
+            <div className="card-grid">
+              {grouped.buyNow.map((item) => (
+                <RecommendationCard key={item.id} item={item} />
+              ))}
+            </div>
+          )}
+        </section>
 
-                <div className="pill-row">
-                  <span className="soft-pill">{setupLabel[item.setup]}</span>
-                  <span className={item.actionable ? 'soft-pill pill-green' : 'soft-pill'}>
-                    {item.actionable ? 'Готов к разбору сделки' : 'Наблюдение'}
-                  </span>
-                  {item.aiAnalysis ? (
-                    <span className={aiStatusClassName(item.aiAnalysis.status)}>{aiStatusLabel[item.aiAnalysis.status]}</span>
-                  ) : null}
-                </div>
+        <section className="panel">
+          <div className="section-head">
+            <div>
+              <h2>Ждать</h2>
+              <p className="muted-text">Идея есть, но входить рано. Лучше дождаться следующего подтверждения.</p>
+            </div>
+          </div>
+          {grouped.wait.length === 0 ? (
+            <div className="empty-box">Сейчас нет монет в режиме ожидания.</div>
+          ) : (
+            <div className="card-grid">
+              {grouped.wait.map((item) => (
+                <RecommendationCard key={item.id} item={item} />
+              ))}
+            </div>
+          )}
+        </section>
 
-                <div className="latest-metrics latest-metrics-3">
-                  <div>
-                    <span className="metric-label">Цена</span>
-                    <strong>{formatNumber(item.price, 3)}</strong>
-                  </div>
-                  <div>
-                    <span className="metric-label">Уверенность</span>
-                    <strong>{Math.round(item.confidence * 100)}%</strong>
-                  </div>
-                  <div>
-                    <span className="metric-label">Оценка</span>
-                    <strong>{formatNumber(item.score, 2)}</strong>
-                  </div>
-                  <div>
-                    <span className="metric-label">RSI</span>
-                    <strong>{formatNumber(item.indicators.rsi, 2)}</strong>
-                  </div>
-                  <div>
-                    <span className="metric-label">ADX</span>
-                    <strong>{formatNumber(item.indicators.adx, 2)}</strong>
-                  </div>
-                  <div>
-                    <span className="metric-label">Объём / средний</span>
-                    <strong>{formatNumber(item.indicators.volumeRatio, 2)}x</strong>
-                  </div>
-                </div>
+        <section className="panel">
+          <div className="section-head">
+            <div>
+              <h2>Если уже купили — продавать</h2>
+              <p className="muted-text">Для новичка этот раздел значит: не покупать заново и подумать о фиксации.</p>
+            </div>
+          </div>
+          {grouped.sell.length === 0 ? (
+            <div className="empty-box">Сигналов на продажу сейчас нет.</div>
+          ) : (
+            <div className="card-grid">
+              {grouped.sell.map((item) => (
+                <RecommendationCard key={item.id} item={item} />
+              ))}
+            </div>
+          )}
+        </section>
 
-                {item.tradePlan ? (
-                  <div className="trade-box">
-                    <div className="trade-grid">
-                      <div>
-                        <span className="metric-label">Вход</span>
-                        <strong>{formatNumber(item.tradePlan.entry, 4)}</strong>
-                      </div>
-                      <div>
-                        <span className="metric-label">Стоп</span>
-                        <strong>{formatNumber(item.tradePlan.stopLoss, 4)}</strong>
-                      </div>
-                      <div>
-                        <span className="metric-label">Цель 1</span>
-                        <strong>{formatNumber(item.tradePlan.takeProfit1, 4)}</strong>
-                      </div>
-                      <div>
-                        <span className="metric-label">Цель 2</span>
-                        <strong>{formatNumber(item.tradePlan.takeProfit2, 4)}</strong>
-                      </div>
-                      <div>
-                        <span className="metric-label">Риск</span>
-                        <strong>{formatNumber(item.tradePlan.riskAmountUsd, 2)} USD</strong>
-                      </div>
-                      <div>
-                        <span className="metric-label">Размер позиции</span>
-                        <strong>{formatNumber(item.tradePlan.suggestedPositionUnits, 6)}</strong>
-                      </div>
-                    </div>
-                    <p className="muted trade-note">
-                      Соотношение риск/прибыль {formatNumber(item.tradePlan.riskRewardRatio, 2)} ·{' '}
-                      {item.tradePlan.invalidation}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="trade-box trade-box-muted">
-                    <p className="muted">Торговый план не выдан: сигнал не прошёл риск-фильтр или рынок некачественный.</p>
-                  </div>
-                )}
-
-                {item.aiAnalysis ? (
-                  <div className="ai-card">
-                    <div className="ai-card-topline">
-                      <div>
-                        <h4>Разбор ИИ</h4>
-                        <p className="muted small-text">{formatDateTime(item.aiAnalysis.generatedAt)}</p>
-                      </div>
-                      <div className="ai-verdict-group">
-                        <span className={signalClassName(item.aiAnalysis.verdict)}>{signalLabel[item.aiAnalysis.verdict]}</span>
-                        <span className="soft-pill">{alignmentLabel[item.aiAnalysis.alignmentWithRules]}</span>
-                      </div>
-                    </div>
-
-                    <p className="ai-summary">{item.aiAnalysis.summary}</p>
-                    <p className="muted">{item.aiAnalysis.marketNarrative}</p>
-
-                    {item.aiAnalysis.confidence !== null ? (
-                      <div className="ai-confidence">Уверенность ИИ: {Math.round(item.aiAnalysis.confidence * 100)}%</div>
-                    ) : null}
-
-                    <div className="ai-columns">
-                      <div>
-                        <span className="metric-label">Что подтверждает идею</span>
-                        <ul className="reason-list compact-list">
-                          {item.aiAnalysis.strengths.map((point) => (
-                            <li key={`${item.id}-strength-${point}`}>{point}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div>
-                        <span className="metric-label">Риски</span>
-                        <ul className="reason-list compact-list">
-                          {item.aiAnalysis.risks.map((point) => (
-                            <li key={`${item.id}-risk-${point}`}>{point}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-
-                    <div className="trade-grid ai-plan-grid">
-                      <div>
-                        <span className="metric-label">Стиль входа</span>
-                        <strong>{item.aiAnalysis.entryStyle}</strong>
-                      </div>
-                      <div>
-                        <span className="metric-label">Стиль выхода</span>
-                        <strong>{item.aiAnalysis.exitStyle}</strong>
-                      </div>
-                      <div>
-                        <span className="metric-label">Отмена сценария</span>
-                        <strong>{item.aiAnalysis.invalidation}</strong>
-                      </div>
-                      <div>
-                        <span className="metric-label">Размер позиции</span>
-                        <strong>{item.aiAnalysis.positionSizingNote}</strong>
-                      </div>
-                      <div>
-                        <span className="metric-label">Следующее действие</span>
-                        <strong>{item.aiAnalysis.nextAction}</strong>
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="metric-label">Проверочный список перед входом</span>
-                      <ul className="reason-list compact-list">
-                        {item.aiAnalysis.checklist.map((point) => (
-                          <li key={`${item.id}-check-${point}`}>{point}</li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {item.aiAnalysis.error ? <div className="error-text">Ошибка ИИ: {item.aiAnalysis.error}</div> : null}
-                  </div>
-                ) : null}
-
-                <ul className="reason-list">
-                  {item.reason.map((reason) => (
-                    <li key={`${item.id}-${reason}`}>{reason}</li>
-                  ))}
-                </ul>
-
-                <div className="latest-footer">Сформирован: {formatDateTime(item.createdAt)}</div>
-              </article>
-            ))}
+        <section className="panel learn-panel">
+          <div className="section-head">
+            <div>
+              <h2>Как читать приложение</h2>
+            </div>
+          </div>
+          <div className="learn-grid">
+            <article className="learn-card">
+              <h3>Покупать сейчас</h3>
+              <p>Можно смотреть на вход около указанной цены. Стоп и цели уже показаны в карточке.</p>
+            </article>
+            <article className="learn-card">
+              <h3>Ждать</h3>
+              <p>Не входить сейчас. Ждать, пока приложение переведёт монету в раздел “Покупать сейчас”.</p>
+            </article>
+            <article className="learn-card">
+              <h3>Если уже купили — продавать</h3>
+              <p>Это не шорт. Это подсказка для уже купленной монеты: не докупать и думать о выходе.</p>
+            </article>
           </div>
         </section>
 
         <section className="panel">
           <div className="section-head">
             <div>
-              <h2>История сигналов</h2>
-              <p className="muted">Последние записи анализатора</p>
+              <h2>Короткая история</h2>
+              <p className="muted-text">Последние обновления сигнала по выбранной монете.</p>
             </div>
           </div>
-
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Время</th>
-                  <th>Инструмент</th>
-                  <th>ТФ</th>
-                  <th>Сигнал</th>
-                  <th>ИИ</th>
-                  <th>Режим</th>
-                  <th>Цена</th>
-                  <th>Оценка</th>
-                  <th>Уверенность</th>
-                  <th>ADX</th>
-                  <th>RSI</th>
-                  <th>ATR</th>
-                  <th>Волатильность</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredHistorySignals.length === 0 ? (
-                  <tr>
-                    <td colSpan={13}>История пока пуста. Дождитесь первого успешного цикла анализа.</td>
-                  </tr>
-                ) : null}
-                {filteredHistorySignals.map((item) => (
-                  <tr key={item.id}>
-                    <td>{formatDateTime(item.createdAt)}</td>
-                    <td>{item.symbol}</td>
-                    <td>{item.timeframe}</td>
-                    <td>
-                      <span className={signalClassName(item.signal)}>{signalLabel[item.signal]}</span>
-                    </td>
-                    <td>{item.aiAnalysis ? aiStatusLabel[item.aiAnalysis.status] : '—'}</td>
-                    <td>{regimeLabel[item.regime]}</td>
-                    <td>{formatNumber(item.price, 3)}</td>
-                    <td>{formatNumber(item.score, 2)}</td>
-                    <td>{Math.round(item.confidence * 100)}%</td>
-                    <td>{formatNumber(item.indicators.adx, 2)}</td>
-                    <td>{formatNumber(item.indicators.rsi, 2)}</td>
-                    <td>{formatNumber(item.indicators.atr, 4)}</td>
-                    <td>{formatNumber(item.indicators.volatilityPct, 3)}%</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="history-list">
+            {filteredHistorySignals.length === 0 ? (
+              <div className="empty-box">История пока пустая.</div>
+            ) : (
+              filteredHistorySignals.slice(0, 12).map((item) => {
+                const meta = getRecommendationMeta(item);
+                return (
+                  <article key={item.id} className="history-card">
+                    <div>
+                      <strong>
+                        {item.symbol} · {timeframeLabel(item.timeframe)}
+                      </strong>
+                      <div className="muted-text">{formatDateTime(item.createdAt)}</div>
+                    </div>
+                    <div className="history-right">
+                      <span className={`status-badge ${meta.badgeClassName}`}>{meta.badgeText}</span>
+                      <span className="muted-text">{formatPrice(item.price)}</span>
+                    </div>
+                  </article>
+                );
+              })
+            )}
           </div>
         </section>
       </main>
