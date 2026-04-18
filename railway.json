@@ -10,10 +10,10 @@
       "/webapp/**",
       "/data/**"
     ],
-    "buildCommand": "npm install --production=false && npm run build"
+    "buildCommand": "echo \"Пропускаем сборку: используются уже собранные dist-файлы\""
   },
   "deploy": {
-    "startCommand": "npm start",
+    "startCommand": "node server/dist/index.js",
     "numReplicas": 1,
     "healthcheckPath": "/health",
     "healthcheckTimeout": 120,
