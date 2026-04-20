@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, downloadFullExport, HealthResponse, OpportunitiesResponse, PaperState, SignalItem } from './api';
 
 type DashboardState = {
@@ -6,6 +6,14 @@ type DashboardState = {
   opportunities: OpportunitiesResponse;
   paper: PaperState;
   latestSignals: SignalItem[];
+};
+
+type TabKey = 'overview' | 'signals' | 'paper' | 'activity';
+
+type ActivityItem = {
+  title: string;
+  text: string;
+  time: string | null;
 };
 
 const formatMoney = (value: number): string =>
@@ -32,6 +40,17 @@ const recommendationText: Record<SignalItem['recommendation'], string> = {
   EXIT: 'Не покупать / выходить'
 };
 
+const secondsToNextBoundary = (minutes: number, now = Date.now()): number => {
+  const ms = minutes * 60_000;
+  return Math.max(0, Math.ceil((ms - (now % ms)) / 1000));
+};
+
+const formatCountdown = (totalSeconds: number): string => {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+};
+
 function SignalCard({ item }: { item: SignalItem }) {
   return (
     <div className="recommendation-card">
@@ -53,11 +72,17 @@ function SignalCard({ item }: { item: SignalItem }) {
   );
 }
 
+function EmptyState({ text }: { text: string }) {
+  return <div className="hero-card">{text}</div>;
+}
+
 export default function App() {
   const [data, setData] = useState<DashboardState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TabKey>('overview');
+  const [tick, setTick] = useState(Date.now());
 
   const load = useCallback(async () => {
     try {
@@ -77,7 +102,11 @@ export default function App() {
   useEffect(() => {
     load();
     const timer = window.setInterval(load, 15000);
-    return () => window.clearInterval(timer);
+    const tickTimer = window.setInterval(() => setTick(Date.now()), 1000);
+    return () => {
+      window.clearInterval(timer);
+      window.clearInterval(tickTimer);
+    };
   }, [load]);
 
   const handleRefreshNow = async () => {
@@ -108,6 +137,47 @@ export default function App() {
     }
   };
 
+  const countdown15 = formatCountdown(secondsToNextBoundary(15, tick));
+  const countdown60 = formatCountdown(secondsToNextBoundary(60, tick));
+
+  const activity = useMemo<ActivityItem[]>(() => {
+    if (!data) return [];
+    const items: ActivityItem[] = [
+      {
+        title: 'Последний цикл анализа',
+        text: `Сканер выполнил ${data.health.analyzer.runCount} циклов. Сейчас в рынке: покупать ${data.opportunities.buyNow.length}, ждать ${data.opportunities.wait.length}.`,
+        time: data.health.analyzer.lastRunAt
+      },
+      {
+        title: 'Последнее событие демо-счёта',
+        text: data.paper.summary.lastEventAt
+          ? `Баланс ${formatMoney(data.paper.summary.balanceUsd)} $, закрытых сделок ${data.paper.summary.closedTrades}.`
+          : 'Демо-счёт ещё не зафиксировал событий.',
+        time: data.paper.summary.lastEventAt
+      }
+    ];
+
+    const latestClosed = data.paper.closedTrades[0];
+    if (latestClosed) {
+      items.push({
+        title: `Закрыта сделка ${latestClosed.symbol}`,
+        text: `PnL ${formatMoney(latestClosed.pnlUsd)} $ · причина: ${latestClosed.closeReason}.`,
+        time: latestClosed.closedAt
+      });
+    }
+
+    const latestSignal = data.latestSignals[0];
+    if (latestSignal) {
+      items.push({
+        title: `Последний сигнал ${latestSignal.symbol}`,
+        text: `${recommendationText[latestSignal.recommendation]} · ${latestSignal.headline}`,
+        time: latestSignal.createdAt
+      });
+    }
+
+    return items.sort((a, b) => new Date(b.time ?? 0).getTime() - new Date(a.time ?? 0).getTime());
+  }, [data]);
+
   if (error) {
     return <div className="page"><div className="hero-card">Ошибка: {error}</div></div>;
   }
@@ -121,89 +191,163 @@ export default function App() {
   return (
     <main className="page">
       <section className="hero-card">
-        <h1>Сигналы рынка + демо-счёт</h1>
-        <p>
-          Приложение само анализирует рынок, ищет сигналы, открывает виртуальные сделки и считает статистику без
-          реальных денег.
-        </p>
-        <p>
-          Последний цикл: {formatDateTime(health.analyzer.lastRunAt)} · Баланс демо-счёта: ${formatMoney(paper.summary.balanceUsd)}
-        </p>
-      </section>
-
-      <section className="stats-grid">
-        <div className="stat-card"><span>Покупать сейчас</span><strong>{opportunities.buyNow.length}</strong></div>
-        <div className="stat-card"><span>Ждать</span><strong>{opportunities.wait.length}</strong></div>
-        <div className="stat-card"><span>Закрытых виртуальных сделок</span><strong>{paper.summary.closedTrades}</strong></div>
-        <div className="stat-card"><span>Итог PnL</span><strong>${formatMoney(paper.summary.totalPnlUsd)}</strong></div>
-      </section>
-
-      {opportunities.bestIdea ? (
-        <section className="hero-card">
-          <h2>Главный сигнал сейчас: {opportunities.bestIdea.symbol}</h2>
-          <p>{opportunities.bestIdea.shortText}</p>
-          {opportunities.bestIdea.tradePlan ? (
+        <div className="tab-hero-row">
+          <div>
+            <h1>Сигналы рынка + демо-счёт</h1>
             <p>
-              Вход {formatPrice(opportunities.bestIdea.tradePlan.entryMin)} – {formatPrice(opportunities.bestIdea.tradePlan.entryMax)} ·
-              Стоп {formatPrice(opportunities.bestIdea.tradePlan.stopLoss)} · Продажа 1{' '}
-              {formatPrice(opportunities.bestIdea.tradePlan.takeProfit1)} · Продажа 2{' '}
-              {formatPrice(opportunities.bestIdea.tradePlan.takeProfit2)}
+              Приложение само анализирует рынок, ищет сигналы, открывает виртуальные сделки и считает статистику.
             </p>
-          ) : null}
-        </section>
-      ) : null}
+          </div>
+          <div className="tab-actions">
+            <button onClick={downloadFullExport} disabled={busy}>Выгрузить полную статистику</button>
+            <button onClick={handleRefreshNow} disabled={busy}>Обновить сейчас</button>
+            <button onClick={handleResetPaper} disabled={busy}>Сбросить демо-счёт</button>
+          </div>
+        </div>
 
-      <section className="columns">
-        <div>
-          <h2>Покупать сейчас</h2>
-          {opportunities.buyNow.slice(0, 6).map((item) => <SignalCard key={item.id} item={item} />)}
+        <div className="stats-grid compact-top-grid">
+          <div className="stat-card"><span>Последний анализ</span><strong>{formatDateTime(health.analyzer.lastRunAt)}</strong></div>
+          <div className="stat-card"><span>Следующая 15м свеча</span><strong>{countdown15}</strong></div>
+          <div className="stat-card"><span>Следующая 1ч свеча</span><strong>{countdown60}</strong></div>
+          <div className="stat-card"><span>Баланс демо</span><strong>${formatMoney(paper.summary.balanceUsd)}</strong></div>
         </div>
-        <div>
-          <h2>Ждать</h2>
-          {opportunities.wait.slice(0, 6).map((item) => <SignalCard key={item.id} item={item} />)}
-        </div>
-      </section>
 
-      <section className="hero-card">
-        <h2>Демо-счёт</h2>
-        <p>
-          Текущий баланс: ${formatMoney(paper.summary.balanceUsd)} · Win rate: {formatPercent(paper.summary.winRate)} ·
-          Комиссии: ${formatMoney(paper.summary.totalFeesUsd)}
-        </p>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <button onClick={downloadFullExport} disabled={busy}>Выгрузить полную статистику</button>
-          <button onClick={handleRefreshNow} disabled={busy}>Обновить сейчас</button>
-          <button onClick={handleResetPaper} disabled={busy}>Сбросить демо-счёт</button>
-        </div>
         {message ? <p style={{ marginTop: 12 }}>{message}</p> : null}
       </section>
 
-      <section className="columns">
-        <div>
-          <h2>Открытые виртуальные сделки</h2>
-          {paper.openPositions.map((item) => (
-            <div key={item.id} className="recommendation-card">
-              <strong>{item.symbol}</strong> · {timeframeLabel(item.timeframe)}<br />
-              Вход {formatPrice(item.entryPrice)} · Стоп {formatPrice(item.stopLoss)} · TP1 {formatPrice(item.takeProfit1)} · TP2{' '}
-              {formatPrice(item.takeProfit2)}
-            </div>
-          ))}
-        </div>
-        <div>
-          <h2>Последние виртуальные сделки</h2>
-          {paper.closedTrades.slice(0, 10).map((item) => (
-            <div key={item.id} className="recommendation-card">
-              <strong>{item.symbol}</strong> · {timeframeLabel(item.timeframe)}<br />
-              PnL: ${formatMoney(item.pnlUsd)} · Причина: {item.closeReason} · {formatDateTime(item.closedAt)}
-            </div>
-          ))}
-        </div>
+      <section className="tab-strip">
+        <button className={activeTab === 'overview' ? 'active' : ''} onClick={() => setActiveTab('overview')}>Главное</button>
+        <button className={activeTab === 'signals' ? 'active' : ''} onClick={() => setActiveTab('signals')}>Сигналы</button>
+        <button className={activeTab === 'paper' ? 'active' : ''} onClick={() => setActiveTab('paper')}>Демо-счёт</button>
+        <button className={activeTab === 'activity' ? 'active' : ''} onClick={() => setActiveTab('activity')}>Активность</button>
       </section>
 
-      <section className="hero-card">
-        <h2>Последние сигналы рынка</h2>
-        {latestSignals.slice(0, 10).map((item) => <SignalCard key={item.id} item={item} />)}
-      </section>
+      {activeTab === 'overview' ? (
+        <>
+          {opportunities.bestIdea ? (
+            <section className="hero-card">
+              <h2>Главный сигнал сейчас: {opportunities.bestIdea.symbol}</h2>
+              <p>{opportunities.bestIdea.shortText}</p>
+              {opportunities.bestIdea.tradePlan ? (
+                <p>
+                  Вход {formatPrice(opportunities.bestIdea.tradePlan.entryMin)} – {formatPrice(opportunities.bestIdea.tradePlan.entryMax)} ·
+                  Стоп {formatPrice(opportunities.bestIdea.tradePlan.stopLoss)} · Продажа 1{' '}
+                  {formatPrice(opportunities.bestIdea.tradePlan.takeProfit1)} · Продажа 2{' '}
+                  {formatPrice(opportunities.bestIdea.tradePlan.takeProfit2)}
+                </p>
+              ) : null}
+            </section>
+          ) : (
+            <EmptyState text="Пока нет главного сигнала. Приложение ждёт следующий цикл и новую свечу." />
+          )}
+
+          <section className="stats-grid">
+            <div className="stat-card"><span>Покупать сейчас</span><strong>{opportunities.buyNow.length}</strong></div>
+            <div className="stat-card"><span>Ждать</span><strong>{opportunities.wait.length}</strong></div>
+            <div className="stat-card"><span>Открытых сделок</span><strong>{paper.summary.openPositions}</strong></div>
+            <div className="stat-card"><span>Итог PnL</span><strong>${formatMoney(paper.summary.totalPnlUsd)}</strong></div>
+          </section>
+
+          <section className="columns">
+            <div>
+              <h2>Что купить сейчас</h2>
+              {opportunities.buyNow.slice(0, 4).map((item) => <SignalCard key={item.id} item={item} />)}
+              {opportunities.buyNow.length === 0 ? <EmptyState text="Сейчас сильных сигналов на покупку нет." /> : null}
+            </div>
+            <div>
+              <h2>Что ждать</h2>
+              {opportunities.wait.slice(0, 4).map((item) => <SignalCard key={item.id} item={item} />)}
+              {opportunities.wait.length === 0 ? <EmptyState text="Сейчас нет идей в режиме ожидания." /> : null}
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      {activeTab === 'signals' ? (
+        <>
+          <section className="columns">
+            <div>
+              <h2>Покупать сейчас</h2>
+              {opportunities.buyNow.slice(0, 8).map((item) => <SignalCard key={item.id} item={item} />)}
+              {opportunities.buyNow.length === 0 ? <EmptyState text="Пока нет сильных сигналов на вход." /> : null}
+            </div>
+            <div>
+              <h2>Ждать</h2>
+              {opportunities.wait.slice(0, 8).map((item) => <SignalCard key={item.id} item={item} />)}
+              {opportunities.wait.length === 0 ? <EmptyState text="Сейчас всё либо слабое, либо уже отработало." /> : null}
+            </div>
+          </section>
+
+          <section className="hero-card">
+            <h2>Последние сигналы рынка</h2>
+            {latestSignals.slice(0, 12).map((item) => <SignalCard key={item.id} item={item} />)}
+            {latestSignals.length === 0 ? <p>Сигналов пока нет.</p> : null}
+          </section>
+        </>
+      ) : null}
+
+      {activeTab === 'paper' ? (
+        <>
+          <section className="stats-grid">
+            <div className="stat-card"><span>Стартовый баланс</span><strong>${formatMoney(paper.summary.startingBalanceUsd)}</strong></div>
+            <div className="stat-card"><span>Текущий баланс</span><strong>${formatMoney(paper.summary.balanceUsd)}</strong></div>
+            <div className="stat-card"><span>Win rate</span><strong>{formatPercent(paper.summary.winRate)}</strong></div>
+            <div className="stat-card"><span>Комиссии</span><strong>${formatMoney(paper.summary.totalFeesUsd)}</strong></div>
+          </section>
+
+          <section className="columns">
+            <div>
+              <h2>Открытые виртуальные сделки</h2>
+              {paper.openPositions.map((item) => (
+                <div key={item.id} className="recommendation-card">
+                  <strong>{item.symbol}</strong> · {timeframeLabel(item.timeframe)}<br />
+                  Вход {formatPrice(item.entryPrice)} · Стоп {formatPrice(item.stopLoss)} · TP1 {formatPrice(item.takeProfit1)} · TP2{' '}
+                  {formatPrice(item.takeProfit2)}
+                </div>
+              ))}
+              {paper.openPositions.length === 0 ? <EmptyState text="Пока нет открытых демо-сделок." /> : null}
+            </div>
+            <div>
+              <h2>Последние закрытые сделки</h2>
+              {paper.closedTrades.slice(0, 12).map((item) => (
+                <div key={item.id} className="recommendation-card">
+                  <strong>{item.symbol}</strong> · {timeframeLabel(item.timeframe)}<br />
+                  PnL: ${formatMoney(item.pnlUsd)} · Причина: {item.closeReason} · {formatDateTime(item.closedAt)}
+                </div>
+              ))}
+              {paper.closedTrades.length === 0 ? <EmptyState text="Закрытых демо-сделок пока нет." /> : null}
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      {activeTab === 'activity' ? (
+        <>
+          <section className="hero-card">
+            <h2>Что происходит сейчас</h2>
+            <p>
+              Сканер {health.analyzer.isRunning ? 'сейчас выполняет цикл анализа.' : 'ждёт следующий цикл.'} Проверяется до{' '}
+              {health.universe.maxSymbolsToAnalyze} монет, таймфреймы — 15 минут и 1 час.
+            </p>
+            <p>
+              Если цифры на экране не меняются несколько минут подряд — это нормально: стратегия ждёт закрытия новой свечи.
+            </p>
+          </section>
+
+          <section className="hero-card">
+            <h2>Последние действия</h2>
+            <div className="activity-list">
+              {activity.map((item, index) => (
+                <div key={`${item.title}-${index}`} className="activity-item">
+                  <strong>{item.title}</strong>
+                  <p>{item.text}</p>
+                  <span>{formatDateTime(item.time)}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
+      ) : null}
     </main>
   );
 }

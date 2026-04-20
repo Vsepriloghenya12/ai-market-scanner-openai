@@ -507,3 +507,80 @@ h3 {
 .search-box input:focus {
   border-color: rgba(125, 211, 252, 0.5);
 }
+
+.tab-hero-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.tab-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tab-actions button,
+.tab-strip button {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(15, 23, 42, 0.92);
+  color: #e2e8f0;
+  border-radius: 14px;
+  padding: 11px 15px;
+  cursor: pointer;
+}
+
+.tab-actions button:disabled,
+.tab-strip button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.tab-strip {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tab-strip button.active {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.compact-top-grid .stat-card strong {
+  font-size: 18px;
+}
+
+.activity-list {
+  display: grid;
+  gap: 12px;
+}
+
+.activity-item {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 18px;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.activity-item p {
+  margin: 8px 0;
+}
+
+.activity-item span {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+@media (max-width: 760px) {
+  .tab-strip {
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .tab-strip button {
+    white-space: nowrap;
+  }
+}

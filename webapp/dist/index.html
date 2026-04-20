@@ -20,15 +20,13 @@
     *{box-sizing:border-box}
     body{margin:0;font-family:Inter,Arial,sans-serif;background:linear-gradient(180deg,#020617,#07111f 40%,#0b1220);color:var(--text)}
     .wrap{max-width:1280px;margin:0 auto;padding:24px}
-    .top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:20px}
+    .top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:16px}
     h1,h2,h3{margin:0 0 10px}
     p{margin:0;color:var(--muted);line-height:1.45}
     .grid{display:grid;gap:16px}
     .grid-4{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
-    .grid-3{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+    .grid-2{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
     .card{background:rgba(15,23,42,.92);border:1px solid var(--line);border-radius:22px;padding:18px;box-shadow:0 18px 40px rgba(0,0,0,.28)}
-    .hero{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);gap:16px}
-    @media (max-width: 900px){.hero{grid-template-columns:1fr}}
     .big{font-size:32px;font-weight:800;letter-spacing:-0.02em}
     .label{display:block;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
     .muted{color:var(--muted)}
@@ -52,57 +50,91 @@
     .hint{margin-top:12px;padding:14px;border-radius:16px;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.18)}
     .good{color:#86efac;font-weight:700}
     .bad{color:#fca5a5;font-weight:700}
-    .btn{border:0;border-radius:12px;padding:11px 15px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer}
+    .btn{border:1px solid rgba(148,163,184,.24);border-radius:12px;padding:11px 15px;background:#0f172a;color:#fff;font-weight:700;cursor:pointer}
+    .btn.primary{background:#2563eb;border-color:#2563eb}
     .btn.secondary{background:#334155}
     .small{font-size:13px}
+    .tabs{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+    .tab{border:1px solid rgba(148,163,184,.24);background:rgba(15,23,42,.92);color:var(--text);padding:11px 15px;border-radius:999px;cursor:pointer;font-weight:700}
+    .tab.active{background:rgba(56,189,248,.16);border-color:rgba(56,189,248,.4)}
+    .tab-panel{display:none}
+    .tab-panel.active{display:block}
+    .activity-list{display:grid;gap:12px;margin-top:12px}
+    .activity-item{padding:14px;border:1px solid var(--line);border-radius:18px;background:rgba(2,6,23,.28)}
+    .activity-item span{display:block;margin-top:8px;color:var(--muted);font-size:13px}
+    @media (max-width: 760px){.tabs{overflow-x:auto;flex-wrap:nowrap;padding-bottom:6px}.tab{white-space:nowrap}}
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="top">
       <div>
-        <h1>Сканер рынка + демо-счёт</h1>
+        <h1>Сигналы рынка + демо-счёт</h1>
         <p>Приложение само анализирует рынок, ищет сигналы, открывает виртуальные сделки на демо-счёте и считает статистику без реальных денег.</p>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn secondary" id="exportFull">Выгрузить полную статистику</button>
-        <button class="btn" id="reloadBtn">Обновить сейчас</button>
+        <button class="btn primary" id="reloadBtn">Обновить сейчас</button>
         <button class="btn secondary" id="resetPaper">Сбросить демо-счёт</button>
       </div>
     </div>
+
+    <div class="grid grid-4" style="margin-bottom:16px" id="topStats"></div>
     <div id="actionMessage" class="hint" style="display:none;margin-bottom:16px"></div>
 
-    <section class="hero">
-      <div class="card" id="bestIdeaCard"></div>
+    <div class="tabs">
+      <button class="tab active" data-tab="overview">Главное</button>
+      <button class="tab" data-tab="signals">Сигналы</button>
+      <button class="tab" data-tab="paper">Демо-счёт</button>
+      <button class="tab" data-tab="activity">Активность</button>
+    </div>
+
+    <section class="tab-panel active" id="tab-overview">
+      <div class="grid grid-2">
+        <div class="card" id="bestIdeaCard"></div>
+        <div class="card" id="overviewCard"></div>
+      </div>
+      <div class="grid grid-4" style="margin-top:16px" id="summaryGrid"></div>
+      <div class="grid grid-2" style="margin-top:16px">
+        <div class="card" id="buyNowCompact"></div>
+        <div class="card" id="waitCompact"></div>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="tab-signals">
+      <div class="grid grid-2">
+        <div class="card" id="buyNowCard"></div>
+        <div class="card" id="waitCard"></div>
+      </div>
+      <div class="card" style="margin-top:16px" id="latestSignalsCard"></div>
+    </section>
+
+    <section class="tab-panel" id="tab-paper">
+      <div class="grid grid-4" id="paperSummaryGrid"></div>
+      <div class="grid grid-2" style="margin-top:16px">
+        <div class="card" id="openPositionsCard"></div>
+        <div class="card" id="closedTradesCard"></div>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="tab-activity">
       <div class="card" id="engineCard"></div>
+      <div class="card" style="margin-top:16px" id="activityCard"></div>
     </section>
-
-    <section class="grid grid-4" style="margin-top:16px" id="summaryGrid"></section>
-
-    <section class="grid grid-3" style="margin-top:16px">
-      <div class="card" id="buyNowCard"></div>
-      <div class="card" id="waitCard"></div>
-      <div class="card" id="paperCard"></div>
-    </section>
-
-    <section class="grid grid-3" style="margin-top:16px">
-      <div class="card" id="openPositionsCard"></div>
-      <div class="card" id="closedTradesCard" style="grid-column:span 2"></div>
-    </section>
-
-    <section class="card" style="margin-top:16px" id="latestSignalsCard"></section>
   </div>
 <script>
 const fmt2 = new Intl.NumberFormat('ru-RU',{maximumFractionDigits:2});
 const fmt4 = new Intl.NumberFormat('ru-RU',{maximumFractionDigits:4});
 const money = (v)=>'$'+fmt2.format(Number(v||0));
-const num = (v)=>fmt2.format(Number(v||0));
 const price = (v)=> Number(v||0) >= 1000 ? fmt2.format(Number(v||0)) : fmt4.format(Number(v||0));
 const pct = (v)=> `${fmt2.format(Number(v||0)*100)}%`;
 const dt = (v)=> v ? new Date(v).toLocaleString('ru-RU') : '—';
 const recText = { BUY_NOW:'Покупать сейчас', WAIT:'Ждать', EXIT:'Не покупать / выходить' };
 const recClass = { BUY_NOW:'buy', WAIT:'wait', EXIT:'exit' };
 const tf = (v)=> { const n=Number(v); if(!Number.isNaN(n)){ if(n<60) return n+' мин'; if(n%60===0) return (n/60)+' ч'; } return v; };
+const secondsToNextBoundary = (minutes)=> { const ms = minutes * 60000; return Math.max(0, Math.ceil((ms - (Date.now() % ms)) / 1000)); };
+const countdown = (seconds)=> `${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;
+let lastPayload = null;
 
 async function j(url, opts){ const r = await fetch(url, opts); if(!r.ok) throw new Error('Ошибка запроса '+r.status); return r.json(); }
 
@@ -124,13 +156,48 @@ function signalShort(s){
   </div>`;
 }
 
-async function load(){
-  const [health, opportunities, paper, latest] = await Promise.all([
-    j('/api/health'),
-    j('/api/opportunities'),
-    j('/api/paper'),
-    j('/api/signals/latest')
-  ]);
+function buildActivity(health, opportunities, paper, latest){
+  const events = [
+    {
+      title: 'Последний цикл анализа',
+      text: `Сканер выполнил ${health.analyzer.runCount} циклов. Сейчас покупать: ${opportunities.buyNow.length}, ждать: ${opportunities.wait.length}.`,
+      time: health.analyzer.lastRunAt
+    },
+    {
+      title: 'Последнее событие демо-счёта',
+      text: paper.summary.lastEventAt ? `Баланс ${money(paper.summary.balanceUsd)}, закрытых сделок ${paper.summary.closedTrades}.` : 'Демо-счёт ещё не зафиксировал событий.',
+      time: paper.summary.lastEventAt
+    }
+  ];
+  if (paper.closedTrades[0]) {
+    events.push({
+      title: `Закрыта сделка ${paper.closedTrades[0].symbol}`,
+      text: `PnL ${money(paper.closedTrades[0].pnlUsd)} · причина: ${paper.closedTrades[0].closeReason}.`,
+      time: paper.closedTrades[0].closedAt
+    });
+  }
+  if (latest.items[0]) {
+    events.push({
+      title: `Последний сигнал ${latest.items[0].symbol}`,
+      text: `${recText[latest.items[0].recommendation]} · ${latest.items[0].headline}`,
+      time: latest.items[0].createdAt
+    });
+  }
+  return events.sort((a,b)=> new Date(b.time || 0) - new Date(a.time || 0));
+}
+
+function renderTopStats(health, paper){
+  document.getElementById('topStats').innerHTML = `
+    <div class="card"><span class="label">Последний анализ</span><strong>${dt(health.analyzer.lastRunAt)}</strong></div>
+    <div class="card"><span class="label">Следующая 15м свеча</span><strong>${countdown(secondsToNextBoundary(15))}</strong></div>
+    <div class="card"><span class="label">Следующая 1ч свеча</span><strong>${countdown(secondsToNextBoundary(60))}</strong></div>
+    <div class="card"><span class="label">Баланс демо</span><strong>${money(paper.summary.balanceUsd)}</strong></div>
+  `;
+}
+
+function render(health, opportunities, paper, latest){
+  lastPayload = { health, opportunities, paper, latest };
+  renderTopStats(health, paper);
 
   const best = opportunities.bestIdea;
   document.getElementById('bestIdeaCard').innerHTML = best ? `
@@ -144,49 +211,57 @@ async function load(){
     </div>
     <p style="margin-top:14px">${best.shortText}</p>
     ${planHtml(best)}
-  ` : `
-    <span class="label">Главный сигнал сейчас</span>
-    <div class="empty">Пока нет готовой идеи. Приложение ждёт следующий цикл сканирования рынка.</div>
-  `;
+  ` : `<span class="label">Главный сигнал сейчас</span><div class="empty">Пока нет готовой идеи. Приложение ждёт следующий цикл сканирования рынка.</div>`;
 
-  document.getElementById('engineCard').innerHTML = `
-    <span class="label">Что делает приложение</span>
-    <div class="row"><span class="status ${health.analyzer.isRunning ? 'live' : 'off'}">${health.analyzer.isRunning ? 'Сейчас анализирует рынок' : 'Ждёт следующего цикла'}</span><span class="small muted">Последний цикл: ${dt(health.analyzer.lastRunAt)}</span></div>
+  document.getElementById('overviewCard').innerHTML = `
+    <span class="label">Что происходит сейчас</span>
+    <div class="row"><span class="status ${health.analyzer.isRunning ? 'live' : 'off'}">${health.analyzer.isRunning ? 'Сейчас анализирует рынок' : 'Ждёт следующего цикла'}</span><span class="small muted">Монет в цикле: ${health.universe.analyzedSymbols}</span></div>
+    <div class="hint small">Если цифры несколько минут не меняются — это нормально. Стратегия ждёт закрытия новой свечи 15м или 1ч. ${health.analyzer.lastError ? '<br><span class="bad">Последняя ошибка: '+health.analyzer.lastError+'</span>' : ''}</div>
     <div class="stats">
-      <div class="stat"><span class="label">Монет в сканере</span><strong>${health.universe.analyzedSymbols}</strong></div>
       <div class="stat"><span class="label">Циклов выполнено</span><strong>${health.analyzer.runCount}</strong></div>
-      <div class="stat"><span class="label">Демо счёт</span><strong>${money(paper.summary.balanceUsd)}</strong></div>
-      <div class="stat"><span class="label">Открыто позиций</span><strong>${paper.summary.openPositions}</strong></div>
+      <div class="stat"><span class="label">Открыто сделок</span><strong>${paper.summary.openPositions}</strong></div>
+      <div class="stat"><span class="label">Закрыто сделок</span><strong>${paper.summary.closedTrades}</strong></div>
+      <div class="stat"><span class="label">PnL</span><strong class="${Number(paper.summary.totalPnlUsd)>=0?'good':'bad'}">${money(paper.summary.totalPnlUsd)}</strong></div>
     </div>
-    <div class="hint small">Приложение автоматически открывает виртуальные сделки по сигналам <strong>«Покупать сейчас»</strong>, без реальных денег, и считает результат. ${health.analyzer.lastError ? '<br><span class="bad">Последняя ошибка: '+health.analyzer.lastError+'</span>' : ''}</div>
   `;
 
   document.getElementById('summaryGrid').innerHTML = `
     <div class="card"><span class="label">Покупать сейчас</span><div class="big">${opportunities.buyNow.length}</div></div>
     <div class="card"><span class="label">Ждать</span><div class="big">${opportunities.wait.length}</div></div>
-    <div class="card"><span class="label">Закрытых демо-сделок</span><div class="big">${paper.summary.closedTrades}</div></div>
-    <div class="card"><span class="label">Результат демо-счёта</span><div class="big ${Number(paper.summary.totalPnlUsd)>=0?'good':'bad'}">${money(paper.summary.totalPnlUsd)}</div></div>
+    <div class="card"><span class="label">Открытых сделок</span><div class="big">${paper.summary.openPositions}</div></div>
+    <div class="card"><span class="label">Итог PnL</span><div class="big ${Number(paper.summary.totalPnlUsd)>=0?'good':'bad'}">${money(paper.summary.totalPnlUsd)}</div></div>
   `;
 
-  document.getElementById('buyNowCard').innerHTML = `<h2>Сигналы: покупать сейчас</h2>${opportunities.buyNow.length ? '<div class="list">'+opportunities.buyNow.slice(0,6).map(signalShort).join('')+'</div>' : '<div class="empty">Пока нет сильных сигналов на вход.</div>'}`;
-  document.getElementById('waitCard').innerHTML = `<h2>Сигналы: ждать</h2>${opportunities.wait.length ? '<div class="list">'+opportunities.wait.slice(0,6).map(signalShort).join('')+'</div>' : '<div class="empty">Сейчас всё либо уже отработало, либо рынок слабый.</div>'}`;
-  document.getElementById('paperCard').innerHTML = `
-    <h2>Демо-счёт</h2>
-    <table>
-      <tr><th>Стартовый баланс</th><td>${money(paper.summary.startingBalanceUsd)}</td></tr>
-      <tr><th>Текущий баланс</th><td>${money(paper.summary.balanceUsd)}</td></tr>
-      <tr><th>Итог PnL</th><td class="${Number(paper.summary.totalPnlUsd)>=0?'good':'bad'}">${money(paper.summary.totalPnlUsd)}</td></tr>
-      <tr><th>Win rate</th><td>${pct(paper.summary.winRate || 0)}</td></tr>
-      <tr><th>Комиссии</th><td>${money(paper.summary.totalFeesUsd)}</td></tr>
-      <tr><th>Последнее событие</th><td>${dt(paper.summary.lastEventAt)}</td></tr>
-    </table>
+  document.getElementById('buyNowCompact').innerHTML = `<h2>Что купить сейчас</h2>${opportunities.buyNow.length ? '<div class="list">'+opportunities.buyNow.slice(0,4).map(signalShort).join('')+'</div>' : '<div class="empty">Сейчас сильных сигналов на покупку нет.</div>'}`;
+  document.getElementById('waitCompact').innerHTML = `<h2>Что ждать</h2>${opportunities.wait.length ? '<div class="list">'+opportunities.wait.slice(0,4).map(signalShort).join('')+'</div>' : '<div class="empty">Сейчас нет идей в режиме ожидания.</div>'}`;
+
+  document.getElementById('buyNowCard').innerHTML = `<h2>Покупать сейчас</h2>${opportunities.buyNow.length ? '<div class="list">'+opportunities.buyNow.slice(0,8).map(signalShort).join('')+'</div>' : '<div class="empty">Пока нет сильных сигналов на вход.</div>'}`;
+  document.getElementById('waitCard').innerHTML = `<h2>Ждать</h2>${opportunities.wait.length ? '<div class="list">'+opportunities.wait.slice(0,8).map(signalShort).join('')+'</div>' : '<div class="empty">Сейчас всё либо слабое, либо уже отработало.</div>'}`;
+  document.getElementById('latestSignalsCard').innerHTML = `<h2>Последние сигналы рынка</h2>${latest.items.length ? '<div class="list">'+latest.items.slice(0,12).map(signalShort).join('')+'</div>' : '<div class="empty">Сигналов пока нет.</div>'}`;
+
+  document.getElementById('paperSummaryGrid').innerHTML = `
+    <div class="card"><span class="label">Стартовый баланс</span><strong>${money(paper.summary.startingBalanceUsd)}</strong></div>
+    <div class="card"><span class="label">Текущий баланс</span><strong>${money(paper.summary.balanceUsd)}</strong></div>
+    <div class="card"><span class="label">Win rate</span><strong>${pct(paper.summary.winRate || 0)}</strong></div>
+    <div class="card"><span class="label">Комиссии</span><strong>${money(paper.summary.totalFeesUsd)}</strong></div>
   `;
 
-  document.getElementById('openPositionsCard').innerHTML = `<h2>Открытые виртуальные сделки</h2>${paper.openPositions.length ? '<table><thead><tr><th>Монета</th><th>Вход</th><th>Стоп</th><th>TP1</th><th>TP2</th></tr></thead><tbody>'+paper.openPositions.slice(0,10).map(p=>`<tr><td>${p.symbol}<div class="small muted">${tf(p.timeframe)}</div></td><td>${price(p.entryPrice)}</td><td>${price(p.stopLoss)}</td><td>${price(p.takeProfit1)}</td><td>${price(p.takeProfit2)}</td></tr>`).join('')+'</tbody></table>' : '<div class="empty">Пока нет открытых виртуальных позиций. Приложение откроет их само, когда появится сильный сигнал.</div>'}`;
+  document.getElementById('openPositionsCard').innerHTML = `<h2>Открытые виртуальные сделки</h2>${paper.openPositions.length ? '<table><thead><tr><th>Монета</th><th>Вход</th><th>Стоп</th><th>TP1</th><th>TP2</th></tr></thead><tbody>'+paper.openPositions.slice(0,10).map(p=>`<tr><td>${p.symbol}<div class="small muted">${tf(p.timeframe)}</div></td><td>${price(p.entryPrice)}</td><td>${price(p.stopLoss)}</td><td>${price(p.takeProfit1)}</td><td>${price(p.takeProfit2)}</td></tr>`).join('')+'</tbody></table>' : '<div class="empty">Пока нет открытых виртуальных позиций.</div>'}`;
+  document.getElementById('closedTradesCard').innerHTML = `<h2>Последние виртуальные сделки</h2>${paper.closedTrades.length ? '<table><thead><tr><th>Монета</th><th>Вход</th><th>Выход</th><th>PnL</th><th>Причина</th><th>Когда</th></tr></thead><tbody>'+paper.closedTrades.slice(0,20).map(t=>`<tr><td>${t.symbol}<div class="small muted">${tf(t.timeframe)}</div></td><td>${price(t.entryPrice)}</td><td>${price(t.exitPrice)}</td><td class="${Number(t.pnlUsd)>=0?'good':'bad'}">${money(t.pnlUsd)}</td><td>${t.closeReason}</td><td>${dt(t.closedAt)}</td></tr>`).join('')+'</tbody></table>' : '<div class="empty">Закрытых виртуальных сделок пока нет.</div>'}`;
 
-  document.getElementById('closedTradesCard').innerHTML = `<h2>Последние виртуальные сделки</h2>${paper.closedTrades.length ? '<table><thead><tr><th>Монета</th><th>Вход</th><th>Выход</th><th>PnL</th><th>Причина</th><th>Когда</th></tr></thead><tbody>'+paper.closedTrades.slice(0,20).map(t=>`<tr><td>${t.symbol}<div class="small muted">${tf(t.timeframe)}</div></td><td>${price(t.entryPrice)}</td><td>${price(t.exitPrice)}</td><td class="${Number(t.pnlUsd)>=0?'good':'bad'}">${money(t.pnlUsd)}</td><td>${t.closeReason}</td><td>${dt(t.closedAt)}</td></tr>`).join('')+'</tbody></table>' : '<div class="empty">Закрытых виртуальных сделок пока нет. Дайте приложению несколько циклов работы на рынке.</div>'}`;
+  document.getElementById('engineCard').innerHTML = `
+    <h2>Движок приложения</h2>
+    <p>Сканер ${health.analyzer.isRunning ? 'сейчас выполняет цикл анализа.' : 'ждёт следующий цикл.'} Таймфреймы — 15 минут и 1 час. Ликвидных монет в выборке: ${health.universe.analyzedSymbols}.</p>
+    <div class="stats">
+      <div class="stat"><span class="label">Всего инструментов</span><strong>${health.universe.totalSymbols}</strong></div>
+      <div class="stat"><span class="label">Подходящих по фильтру</span><strong>${health.universe.eligibleSymbols}</strong></div>
+      <div class="stat"><span class="label">Макс. монет в цикле</span><strong>${health.universe.maxSymbolsToAnalyze}</strong></div>
+      <div class="stat"><span class="label">Последний цикл</span><strong>${dt(health.analyzer.lastRunAt)}</strong></div>
+    </div>
+  `;
 
-  document.getElementById('latestSignalsCard').innerHTML = `<h2>Последние сигналы рынка</h2>${latest.items.length ? '<div class="list">'+latest.items.slice(0,12).map(signalShort).join('')+'</div>' : '<div class="empty">Сигналов пока нет. Проверьте, что сканер запускается и нет ошибок Bybit.</div>'}`;
+  const activity = buildActivity(health, opportunities, paper, latest);
+  document.getElementById('activityCard').innerHTML = `<h2>Последние действия</h2>${activity.length ? '<div class="activity-list">'+activity.map(item=>`<div class="activity-item"><strong>${item.title}</strong><p>${item.text}</p><span>${dt(item.time)}</span></div>`).join('')+'</div>' : '<div class="empty">Событий пока нет.</div>'}`;
 }
 
 const actionMessage = document.getElementById('actionMessage');
@@ -194,64 +269,58 @@ const reloadBtn = document.getElementById('reloadBtn');
 const resetBtn = document.getElementById('resetPaper');
 const exportBtn = document.getElementById('exportFull');
 
-function setBusy(flag){
-  reloadBtn.disabled = flag;
-  resetBtn.disabled = flag;
-  exportBtn.disabled = flag;
-}
-
+function setBusy(flag){ reloadBtn.disabled = flag; resetBtn.disabled = flag; exportBtn.disabled = flag; }
 function setMessage(message, isError = false){
-  if(!message){
-    actionMessage.style.display = 'none';
-    actionMessage.textContent = '';
-    actionMessage.style.borderColor = 'rgba(56,189,248,.18)';
-    actionMessage.style.background = 'rgba(56,189,248,.08)';
-    return;
-  }
+  if(!message){ actionMessage.style.display = 'none'; actionMessage.textContent = ''; return; }
   actionMessage.style.display = 'block';
   actionMessage.textContent = message;
   actionMessage.style.borderColor = isError ? 'rgba(239,68,68,.24)' : 'rgba(56,189,248,.18)';
   actionMessage.style.background = isError ? 'rgba(239,68,68,.08)' : 'rgba(56,189,248,.08)';
 }
 
+async function load(){
+  const [health, opportunities, paper, latest] = await Promise.all([
+    j('/api/health'),
+    j('/api/opportunities'),
+    j('/api/paper'),
+    j('/api/signals/latest')
+  ]);
+  render(health, opportunities, paper, latest);
+}
+
 async function runAnalyzeNow(){
-  setBusy(true);
-  setMessage('Запускаю новый анализ рынка...');
-  try {
-    await j('/api/analyze/now',{method:'POST'});
-    await load();
-    setMessage('Рынок обновлён.');
-  } catch(error){
-    setMessage(error.message || String(error), true);
-    throw error;
-  } finally {
-    setBusy(false);
-  }
+  setBusy(true); setMessage('Запускаю новый анализ рынка...');
+  try { await j('/api/analyze/now', { method: 'POST' }); await load(); setMessage('Рынок обновлён.'); }
+  catch (error){ setMessage(error.message || String(error), true); throw error; }
+  finally { setBusy(false); }
 }
 
 async function resetPaper(){
-  setBusy(true);
-  setMessage('Сбрасываю демо-счёт...');
-  try {
-    await j('/api/paper/reset',{method:'POST'});
-    await load();
-    setMessage('Демо-счёт сброшен.');
-  } catch(error){
-    setMessage(error.message || String(error), true);
-    throw error;
-  } finally {
-    setBusy(false);
-  }
+  setBusy(true); setMessage('Сбрасываю демо-счёт...');
+  try { await j('/api/paper/reset', { method: 'POST' }); await load(); setMessage('Демо-счёт сброшен.'); }
+  catch (error){ setMessage(error.message || String(error), true); throw error; }
+  finally { setBusy(false); }
 }
+
+function showError(error){ console.error(error); }
 
 document.getElementById('reloadBtn').onclick = ()=> runAnalyzeNow().catch(showError);
 document.getElementById('resetPaper').onclick = ()=> resetPaper().catch(showError);
 document.getElementById('exportFull').onclick = ()=> { window.location.href = '/api/export/full'; };
-function showError(error){
-  console.error(error);
-}
+
+document.querySelectorAll('.tab').forEach((button)=> {
+  button.addEventListener('click', ()=> {
+    const tab = button.getAttribute('data-tab');
+    document.querySelectorAll('.tab').forEach((item)=> item.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach((panel)=> panel.classList.remove('active'));
+    button.classList.add('active');
+    document.getElementById(`tab-${tab}`).classList.add('active');
+  });
+});
+
 load().catch((error)=> setMessage(error.message || String(error), true));
 setInterval(()=> load().catch(()=>{}), 15000);
+setInterval(()=> { if (lastPayload) renderTopStats(lastPayload.health, lastPayload.paper); }, 1000);
 </script>
 </body>
 </html>
