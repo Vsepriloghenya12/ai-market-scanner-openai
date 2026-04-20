@@ -24,26 +24,60 @@ class SchedulerService {
     timer = null;
     running = false;
     start() {
-        this.runCycle().catch((error) => {
-            console.error('Первый запуск планировщика завершился ошибкой:', error);
-        });
-        this.timer = setInterval(() => {
+        this.ensureTimer();
+        if (storage_1.storageService.getAnalyzerState().scanEnabled) {
             this.runCycle().catch((error) => {
-                console.error('Плановый цикл завершился ошибкой:', error);
+                console.error('Первый запуск планировщика завершился ошибкой:', error);
             });
-        }, config_1.config.scanIntervalMs);
+        }
     }
     stop() {
         if (this.timer) {
             clearInterval(this.timer);
             this.timer = null;
         }
+        storage_1.storageService.updateAnalyzerState({ isRunning: false });
+    }
+    pause() {
+        this.stop();
+        storage_1.storageService.updateAnalyzerState({
+            scanEnabled: false,
+            pausedAt: new Date().toISOString(),
+            isRunning: false
+        });
+    }
+    resume() {
+        storage_1.storageService.updateAnalyzerState({
+            scanEnabled: true,
+            pausedAt: null,
+            lastError: null
+        });
+        this.start();
+    }
+    isEnabled() {
+        return storage_1.storageService.getAnalyzerState().scanEnabled;
     }
     async runNow() {
+        if (!this.isEnabled()) {
+            throw new Error('Сканер сейчас выключен. Сначала включите его.');
+        }
         await this.runCycle();
     }
+    ensureTimer() {
+        if (this.timer) {
+            return;
+        }
+        this.timer = setInterval(() => {
+            if (!this.isEnabled()) {
+                return;
+            }
+            this.runCycle().catch((error) => {
+                console.error('Плановый цикл завершился ошибкой:', error);
+            });
+        }, config_1.config.scanIntervalMs);
+    }
     async runCycle() {
-        if (this.running) {
+        if (this.running || !this.isEnabled()) {
             return;
         }
         this.running = true;
@@ -52,46 +86,45 @@ class SchedulerService {
         try {
             const universe = await marketData_1.marketDataService.fetchUniverse();
             const jobs = universe.items.flatMap((market) => config_1.config.timeframes.map((timeframe) => ({ market, timeframe })));
-            storage_1.storageService.updateUniverseState({
-                fetchedAt: new Date().toISOString(),
-                totalSymbols: universe.totalSymbols,
-                eligibleSymbols: universe.eligibleSymbols,
-                analyzedSymbols: universe.items.length,
-                topSymbols: universe.items.slice(0, 12).map((item) => item.symbol),
-                minTurnoverUsd: config_1.config.minTurnover24hUsd,
-                maxSymbolsToAnalyze: config_1.config.maxSymbolsToAnalyze
-            });
             await runWithConcurrency(jobs, 2, async ({ market, timeframe }) => {
                 try {
-                    await analysisService_1.analysisService.analyze(market, timeframe);
+                    const candles = await marketData_1.marketDataService.fetchCandles(market.symbol, timeframe);
+                    const snapshot = {
+                        symbol: market.symbol,
+                        rank24h: market.rank24h,
+                        turnover24hUsd: market.turnover24hUsd,
+                        volume24h: market.volume24h,
+                        spreadPct: market.spreadPct,
+                        lastPrice: market.lastPrice,
+                        fundingRate: market.fundingRate
+                    };
+                    await analysisService_1.analysisService.analyzeSymbol({
+                        symbol: market.symbol,
+                        timeframe,
+                        candles,
+                        market: snapshot
+                    });
                 }
                 catch (error) {
-                    const message = error instanceof Error ? error.message : 'Неизвестная ошибка анализатора';
-                    errors.push(`${market.symbol}/${timeframe}: ${message}`);
-                    console.error(`Ошибка анализа для ${market.symbol}/${timeframe}:`, error);
+                    const message = `${market.symbol}/${timeframe}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+                    console.error(`Ошибка анализа ${message}`);
+                    errors.push(message);
                 }
             });
-            const current = storage_1.storageService.getAnalyzerState();
             storage_1.storageService.updateAnalyzerState({
-                isRunning: false,
                 lastRunAt: new Date().toISOString(),
-                runCount: current.runCount + 1,
-                lastError: errors.length > 0 ? errors.slice(0, 20).join(' | ') : null
+                runCount: storage_1.storageService.getAnalyzerState().runCount + 1,
+                lastError: errors.length > 0 ? errors.slice(0, 5).join(' | ') : null
             });
         }
         catch (error) {
-            const message = error instanceof Error ? error.message : 'Неизвестная ошибка анализа рынка';
-            const current = storage_1.storageService.getAnalyzerState();
-            storage_1.storageService.updateAnalyzerState({
-                isRunning: false,
-                lastRunAt: new Date().toISOString(),
-                runCount: current.runCount + 1,
-                lastError: message
-            });
-            console.error('Ошибка при обновлении рынка:', error);
+            const message = error instanceof Error ? error.message : 'Unknown scheduler error';
+            storage_1.storageService.updateAnalyzerState({ lastError: message });
+            throw error;
         }
         finally {
             this.running = false;
+            storage_1.storageService.updateAnalyzerState({ isRunning: false });
         }
     }
 }

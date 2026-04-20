@@ -229,6 +229,37 @@ apiRouter.get('/paper', (_request, response) => {
   response.json(paperTradingService.getState());
 });
 
+apiRouter.get('/scanner', (_request, response) => {
+  const analyzer = storageService.getAnalyzerState();
+  response.json({
+    enabled: analyzer.scanEnabled,
+    isRunning: analyzer.isRunning,
+    pausedAt: analyzer.pausedAt,
+    lastRunAt: analyzer.lastRunAt,
+    runCount: analyzer.runCount
+  });
+});
+
+apiRouter.post('/scanner/toggle', (request, response) => {
+  const enabled = Boolean(request.body?.enabled);
+
+  if (enabled) {
+    schedulerService.resume();
+  } else {
+    schedulerService.pause();
+  }
+
+  const analyzer = storageService.getAnalyzerState();
+  response.json({
+    ok: true,
+    enabled: analyzer.scanEnabled,
+    isRunning: analyzer.isRunning,
+    pausedAt: analyzer.pausedAt,
+    lastRunAt: analyzer.lastRunAt,
+    runCount: analyzer.runCount
+  });
+});
+
 apiRouter.post('/analyze/now', async (_request, response) => {
   try {
     await schedulerService.runNow();

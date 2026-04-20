@@ -3,6 +3,16 @@ export interface AnalyzerState {
   isRunning: boolean;
   runCount: number;
   lastError: string | null;
+  scanEnabled: boolean;
+  pausedAt: string | null;
+}
+
+export interface ScannerState {
+  enabled: boolean;
+  isRunning: boolean;
+  pausedAt: string | null;
+  lastRunAt: string | null;
+  runCount: number;
 }
 
 export interface UniverseState {
@@ -108,7 +118,13 @@ export const api = {
   getPaper: () => request<PaperState>('/api/paper'),
   getSignalsLatest: () => request<{ items: SignalItem[] }>('/api/signals/latest'),
   runAnalyzeNow: () => request<{ ok: boolean }>('/api/analyze/now', { method: 'POST' }),
-  resetPaper: () => request<PaperState>('/api/paper/reset', { method: 'POST' })
+  resetPaper: () => request<PaperState>('/api/paper/reset', { method: 'POST' }),
+  getScanner: () => request<ScannerState>('/api/scanner'),
+  setScannerEnabled: (enabled: boolean) => request<{ ok: boolean } & ScannerState>('/api/scanner/toggle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled })
+  })
 };
 
 

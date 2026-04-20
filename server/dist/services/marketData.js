@@ -42,7 +42,7 @@ class MarketDataService {
             }
             const isRateLimit = payload.retCode === 10006 || payload.retMsg?.toLowerCase().includes('rate limit');
             if (isRateLimit && attempts < 3) {
-                await new Promise((resolve) => setTimeout(resolve, 4000 * attempts));
+                await new Promise((resolve) => setTimeout(resolve, 4_000 * attempts));
                 continue;
             }
             throw new Error(`Ошибка Bybit для ${symbol}/${interval}: ${payload.retMsg}`);

@@ -147,7 +147,6 @@ exports.apiRouter.get('/strategy', (_request, response) => {
 exports.apiRouter.get('/ai/status', (_request, response) => {
     response.json(aiAnalysisService_1.aiAnalysisService.getStatus());
 });
-
 exports.apiRouter.get('/export/full', (_request, response) => {
     const signals = storage_1.storageService.getSignals();
     const paper = paperTradingService_1.paperTradingService.getState();
@@ -192,9 +191,36 @@ exports.apiRouter.get('/export/full', (_request, response) => {
     response.setHeader('Content-Disposition', `attachment; filename="full-statistics-${safeStamp}.json"`);
     response.status(200).send(JSON.stringify(payload, null, 2));
 });
-
 exports.apiRouter.get('/paper', (_request, response) => {
     response.json(paperTradingService_1.paperTradingService.getState());
+});
+exports.apiRouter.get('/scanner', (_request, response) => {
+    const analyzer = storage_1.storageService.getAnalyzerState();
+    response.json({
+        enabled: analyzer.scanEnabled,
+        isRunning: analyzer.isRunning,
+        pausedAt: analyzer.pausedAt,
+        lastRunAt: analyzer.lastRunAt,
+        runCount: analyzer.runCount
+    });
+});
+exports.apiRouter.post('/scanner/toggle', (request, response) => {
+    const enabled = Boolean(request.body?.enabled);
+    if (enabled) {
+        scheduler_1.schedulerService.resume();
+    }
+    else {
+        scheduler_1.schedulerService.pause();
+    }
+    const analyzer = storage_1.storageService.getAnalyzerState();
+    response.json({
+        ok: true,
+        enabled: analyzer.scanEnabled,
+        isRunning: analyzer.isRunning,
+        pausedAt: analyzer.pausedAt,
+        lastRunAt: analyzer.lastRunAt,
+        runCount: analyzer.runCount
+    });
 });
 exports.apiRouter.post('/analyze/now', async (_request, response) => {
     try {

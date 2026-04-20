@@ -107,6 +107,8 @@ export interface AnalyzerState {
   isRunning: boolean;
   runCount: number;
   lastError: string | null;
+  scanEnabled: boolean;
+  pausedAt: string | null;
 }
 
 export interface UniverseState {

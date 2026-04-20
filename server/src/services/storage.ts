@@ -15,7 +15,9 @@ const defaultAnalyzerState: AnalyzerState = {
   lastRunAt: null,
   isRunning: false,
   runCount: 0,
-  lastError: null
+  lastError: null,
+  scanEnabled: true,
+  pausedAt: null
 };
 
 const defaultUniverseState: UniverseState = {

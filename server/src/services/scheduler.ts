@@ -28,15 +28,13 @@ export class SchedulerService {
   private running = false;
 
   public start(): void {
-    this.runCycle().catch((error) => {
-      console.error('Первый запуск планировщика завершился ошибкой:', error);
-    });
+    this.ensureTimer();
 
-    this.timer = setInterval(() => {
+    if (storageService.getAnalyzerState().scanEnabled) {
       this.runCycle().catch((error) => {
-        console.error('Плановый цикл завершился ошибкой:', error);
+        console.error('Первый запуск планировщика завершился ошибкой:', error);
       });
-    }, config.scanIntervalMs);
+    }
   }
 
   public stop(): void {
@@ -44,14 +42,56 @@ export class SchedulerService {
       clearInterval(this.timer);
       this.timer = null;
     }
+    storageService.updateAnalyzerState({ isRunning: false });
+  }
+
+  public pause(): void {
+    this.stop();
+    storageService.updateAnalyzerState({
+      scanEnabled: false,
+      pausedAt: new Date().toISOString(),
+      isRunning: false
+    });
+  }
+
+  public resume(): void {
+    storageService.updateAnalyzerState({
+      scanEnabled: true,
+      pausedAt: null,
+      lastError: null
+    });
+    this.start();
+  }
+
+  public isEnabled(): boolean {
+    return storageService.getAnalyzerState().scanEnabled;
   }
 
   public async runNow(): Promise<void> {
+    if (!this.isEnabled()) {
+      throw new Error('Сканер сейчас выключен. Сначала включите его.');
+    }
     await this.runCycle();
   }
 
+  private ensureTimer(): void {
+    if (this.timer) {
+      return;
+    }
+
+    this.timer = setInterval(() => {
+      if (!this.isEnabled()) {
+        return;
+      }
+
+      this.runCycle().catch((error) => {
+        console.error('Плановый цикл завершился ошибкой:', error);
+      });
+    }, config.scanIntervalMs);
+  }
+
   private async runCycle(): Promise<void> {
-    if (this.running) {
+    if (this.running || !this.isEnabled()) {
       return;
     }
 
@@ -62,47 +102,48 @@ export class SchedulerService {
 
     try {
       const universe = await marketDataService.fetchUniverse();
-      const jobs = universe.items.flatMap((market) => config.timeframes.map((timeframe) => ({ market, timeframe })));
-
-      storageService.updateUniverseState({
-        fetchedAt: new Date().toISOString(),
-        totalSymbols: universe.totalSymbols,
-        eligibleSymbols: universe.eligibleSymbols,
-        analyzedSymbols: universe.items.length,
-        topSymbols: universe.items.slice(0, 12).map((item) => item.symbol),
-        minTurnoverUsd: config.minTurnover24hUsd,
-        maxSymbolsToAnalyze: config.maxSymbolsToAnalyze
-      });
+      const jobs = universe.items.flatMap((market) =>
+        config.timeframes.map((timeframe) => ({ market, timeframe }))
+      );
 
       await runWithConcurrency(jobs, 2, async ({ market, timeframe }) => {
         try {
-          await analysisService.analyze(market, timeframe);
+          const candles = await marketDataService.fetchCandles(market.symbol, timeframe);
+          const snapshot: MarketSnapshot = {
+            symbol: market.symbol,
+            rank24h: market.rank24h,
+            turnover24hUsd: market.turnover24hUsd,
+            volume24h: market.volume24h,
+            spreadPct: market.spreadPct,
+            lastPrice: market.lastPrice,
+            fundingRate: market.fundingRate
+          };
+
+          await analysisService.analyzeSymbol({
+            symbol: market.symbol,
+            timeframe,
+            candles,
+            market: snapshot
+          });
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Неизвестная ошибка анализатора';
-          errors.push(`${market.symbol}/${timeframe}: ${message}`);
-          console.error(`Ошибка анализа для ${market.symbol}/${timeframe}:`, error);
+          const message = `${market.symbol}/${timeframe}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+          console.error(`Ошибка анализа ${message}`);
+          errors.push(message);
         }
       });
 
-      const current = storageService.getAnalyzerState();
       storageService.updateAnalyzerState({
-        isRunning: false,
         lastRunAt: new Date().toISOString(),
-        runCount: current.runCount + 1,
-        lastError: errors.length > 0 ? errors.slice(0, 20).join(' | ') : null
+        runCount: storageService.getAnalyzerState().runCount + 1,
+        lastError: errors.length > 0 ? errors.slice(0, 5).join(' | ') : null
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Неизвестная ошибка анализа рынка';
-      const current = storageService.getAnalyzerState();
-      storageService.updateAnalyzerState({
-        isRunning: false,
-        lastRunAt: new Date().toISOString(),
-        runCount: current.runCount + 1,
-        lastError: message
-      });
-      console.error('Ошибка при обновлении рынка:', error);
+      const message = error instanceof Error ? error.message : 'Unknown scheduler error';
+      storageService.updateAnalyzerState({ lastError: message });
+      throw error;
     } finally {
       this.running = false;
+      storageService.updateAnalyzerState({ isRunning: false });
     }
   }
 }

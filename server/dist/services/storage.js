@@ -11,7 +11,9 @@ const defaultAnalyzerState = {
     lastRunAt: null,
     isRunning: false,
     runCount: 0,
-    lastError: null
+    lastError: null,
+    scanEnabled: true,
+    pausedAt: null
 };
 const defaultUniverseState = {
     fetchedAt: null,
@@ -84,6 +86,7 @@ const defaultState = () => ({
     backtest: defaultBacktestState()
 });
 class StorageService {
+    state;
     constructor() {
         ensureStorageDir();
         this.state = this.load();

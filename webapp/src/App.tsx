@@ -137,6 +137,24 @@ export default function App() {
     }
   };
 
+  const handleToggleScanner = async () => {
+    if (!data) return;
+
+    const nextEnabled = !data.health.analyzer.scanEnabled;
+
+    try {
+      setBusy(true);
+      setMessage(nextEnabled ? 'Включаю сканер...' : 'Выключаю сканер...');
+      await api.setScannerEnabled(nextEnabled);
+      await load();
+      setMessage(nextEnabled ? 'Сканер включён.' : 'Сканер выключен.');
+    } catch (loadError) {
+      setMessage(loadError instanceof Error ? loadError.message : 'Не удалось переключить сканер');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const countdown15 = formatCountdown(secondsToNextBoundary(15, tick));
   const countdown60 = formatCountdown(secondsToNextBoundary(60, tick));
 
@@ -200,7 +218,8 @@ export default function App() {
           </div>
           <div className="tab-actions">
             <button onClick={downloadFullExport} disabled={busy}>Выгрузить полную статистику</button>
-            <button onClick={handleRefreshNow} disabled={busy}>Обновить сейчас</button>
+            <button onClick={handleRefreshNow} disabled={busy || !health.analyzer.scanEnabled}>Обновить сейчас</button>
+            <button onClick={handleToggleScanner} disabled={busy}>{health.analyzer.scanEnabled ? 'Выключить сканер' : 'Включить сканер'}</button>
             <button onClick={handleResetPaper} disabled={busy}>Сбросить демо-счёт</button>
           </div>
         </div>
@@ -210,6 +229,7 @@ export default function App() {
           <div className="stat-card"><span>Следующая 15м свеча</span><strong>{countdown15}</strong></div>
           <div className="stat-card"><span>Следующая 1ч свеча</span><strong>{countdown60}</strong></div>
           <div className="stat-card"><span>Баланс демо</span><strong>${formatMoney(paper.summary.balanceUsd)}</strong></div>
+          <div className="stat-card"><span>Сканер</span><strong>{health.analyzer.scanEnabled ? 'Включён' : 'Выключен'}</strong></div>
         </div>
 
         {message ? <p style={{ marginTop: 12 }}>{message}</p> : null}
@@ -238,7 +258,7 @@ export default function App() {
               ) : null}
             </section>
           ) : (
-            <EmptyState text="Пока нет главного сигнала. Приложение ждёт следующий цикл и новую свечу." />
+            <EmptyState text={health.analyzer.scanEnabled ? 'Пока нет главного сигнала. Приложение ждёт следующий цикл и новую свечу.' : 'Сканер выключен. Включите его, чтобы приложение снова искало сигналы.'} />
           )}
 
           <section className="stats-grid">
@@ -246,6 +266,7 @@ export default function App() {
             <div className="stat-card"><span>Ждать</span><strong>{opportunities.wait.length}</strong></div>
             <div className="stat-card"><span>Открытых сделок</span><strong>{paper.summary.openPositions}</strong></div>
             <div className="stat-card"><span>Итог PnL</span><strong>${formatMoney(paper.summary.totalPnlUsd)}</strong></div>
+            <div className="stat-card"><span>Сканер</span><strong>{health.analyzer.scanEnabled ? 'Работает' : 'Остановлен'}</strong></div>
           </section>
 
           <section className="columns">

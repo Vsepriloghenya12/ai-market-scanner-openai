@@ -75,6 +75,7 @@
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn secondary" id="exportFull">Выгрузить полную статистику</button>
         <button class="btn primary" id="reloadBtn">Обновить сейчас</button>
+        <button class="btn secondary" id="toggleScanner">Выключить сканер</button>
         <button class="btn secondary" id="resetPaper">Сбросить демо-счёт</button>
       </div>
     </div>
@@ -192,12 +193,14 @@ function renderTopStats(health, paper){
     <div class="card"><span class="label">Следующая 15м свеча</span><strong>${countdown(secondsToNextBoundary(15))}</strong></div>
     <div class="card"><span class="label">Следующая 1ч свеча</span><strong>${countdown(secondsToNextBoundary(60))}</strong></div>
     <div class="card"><span class="label">Баланс демо</span><strong>${money(paper.summary.balanceUsd)}</strong></div>
+    <div class="card"><span class="label">Сканер</span><strong>${health.analyzer.scanEnabled ? 'Включён' : 'Выключен'}</strong></div>
   `;
 }
 
 function render(health, opportunities, paper, latest){
   lastPayload = { health, opportunities, paper, latest };
   renderTopStats(health, paper);
+  updateActionButtons();
 
   const best = opportunities.bestIdea;
   document.getElementById('bestIdeaCard').innerHTML = best ? `
@@ -211,7 +214,7 @@ function render(health, opportunities, paper, latest){
     </div>
     <p style="margin-top:14px">${best.shortText}</p>
     ${planHtml(best)}
-  ` : `<span class="label">Главный сигнал сейчас</span><div class="empty">Пока нет готовой идеи. Приложение ждёт следующий цикл сканирования рынка.</div>`;
+  ` : `<span class="label">Главный сигнал сейчас</span><div class="empty">${health.analyzer.scanEnabled ? 'Пока нет готовой идеи. Приложение ждёт следующий цикл сканирования рынка.' : 'Сканер выключен. Включите его, чтобы приложение снова искало сигналы.'}</div>`;
 
   document.getElementById('overviewCard').innerHTML = `
     <span class="label">Что происходит сейчас</span>
@@ -222,6 +225,7 @@ function render(health, opportunities, paper, latest){
       <div class="stat"><span class="label">Открыто сделок</span><strong>${paper.summary.openPositions}</strong></div>
       <div class="stat"><span class="label">Закрыто сделок</span><strong>${paper.summary.closedTrades}</strong></div>
       <div class="stat"><span class="label">PnL</span><strong class="${Number(paper.summary.totalPnlUsd)>=0?'good':'bad'}">${money(paper.summary.totalPnlUsd)}</strong></div>
+      <div class="stat"><span class="label">Сканер</span><strong>${health.analyzer.scanEnabled ? 'Работает' : 'Остановлен'}</strong></div>
     </div>
   `;
 
@@ -268,8 +272,15 @@ const actionMessage = document.getElementById('actionMessage');
 const reloadBtn = document.getElementById('reloadBtn');
 const resetBtn = document.getElementById('resetPaper');
 const exportBtn = document.getElementById('exportFull');
+const toggleScannerBtn = document.getElementById('toggleScanner');
 
-function setBusy(flag){ reloadBtn.disabled = flag; resetBtn.disabled = flag; exportBtn.disabled = flag; }
+function setBusy(flag){ reloadBtn.disabled = flag || !lastPayload?.health?.analyzer?.scanEnabled; resetBtn.disabled = flag; exportBtn.disabled = flag; toggleScannerBtn.disabled = flag; }
+function updateActionButtons(){
+  if (!lastPayload) return;
+  toggleScannerBtn.textContent = lastPayload.health.analyzer.scanEnabled ? 'Выключить сканер' : 'Включить сканер';
+  reloadBtn.disabled = !lastPayload.health.analyzer.scanEnabled;
+}
+
 function setMessage(message, isError = false){
   if(!message){ actionMessage.style.display = 'none'; actionMessage.textContent = ''; return; }
   actionMessage.style.display = 'block';
@@ -302,10 +313,27 @@ async function resetPaper(){
   finally { setBusy(false); }
 }
 
+async function toggleScanner(){
+  const enabled = !(lastPayload && lastPayload.health && lastPayload.health.analyzer && lastPayload.health.analyzer.scanEnabled);
+  setBusy(true); setMessage(enabled ? 'Включаю сканер...' : 'Выключаю сканер...');
+  try {
+    await j('/api/scanner/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled })
+    });
+    await load();
+    setMessage(enabled ? 'Сканер включён.' : 'Сканер выключен.');
+  }
+  catch (error){ setMessage(error.message || String(error), true); throw error; }
+  finally { setBusy(false); }
+}
+
 function showError(error){ console.error(error); }
 
 document.getElementById('reloadBtn').onclick = ()=> runAnalyzeNow().catch(showError);
 document.getElementById('resetPaper').onclick = ()=> resetPaper().catch(showError);
+document.getElementById('toggleScanner').onclick = ()=> toggleScanner().catch(showError);
 document.getElementById('exportFull').onclick = ()=> { window.location.href = '/api/export/full'; };
 
 document.querySelectorAll('.tab').forEach((button)=> {
