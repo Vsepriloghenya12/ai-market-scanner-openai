@@ -1,9 +1,13 @@
+
 export type SignalType = 'BUY' | 'SELL' | 'HOLD';
 export type RecommendationType = 'BUY_NOW' | 'WAIT' | 'EXIT';
 export type MarketRegime = 'BULL' | 'BEAR' | 'RANGE';
 export type SetupType = 'BREAKOUT' | 'PULLBACK' | 'BREAKDOWN' | 'NONE';
 export type AIAnalysisStatus = 'READY' | 'SKIPPED' | 'ERROR';
 export type AIAlignment = 'ALIGNED' | 'MIXED' | 'CONTRARIAN';
+export type PaperPositionStatus = 'OPEN' | 'CLOSED';
+export type PaperCloseReason = 'STOP' | 'TAKE_PROFIT_2' | 'EXIT_SIGNAL' | 'TIMEOUT' | 'MANUAL';
+export type BacktestRunStatus = 'IDLE' | 'RUNNING' | 'DONE' | 'ERROR';
 
 export interface Candle {
   timestamp: number;
@@ -121,6 +125,115 @@ export interface StrategyRule {
   description: string;
 }
 
+export interface PaperPosition {
+  id: string;
+  symbol: string;
+  timeframe: string;
+  signalId: string;
+  openedAt: string;
+  updatedAt: string;
+  entryPrice: number;
+  quantity: number;
+  remainingQuantity: number;
+  stopLoss: number;
+  takeProfit1: number;
+  takeProfit2: number;
+  tp1Hit: boolean;
+  realizedPnlUsd: number;
+  realizedFeesUsd: number;
+  status: PaperPositionStatus;
+  entryComment: string;
+}
+
+export interface PaperTrade {
+  id: string;
+  symbol: string;
+  timeframe: string;
+  openedAt: string;
+  closedAt: string;
+  entryPrice: number;
+  exitPrice: number;
+  quantity: number;
+  pnlUsd: number;
+  pnlPct: number;
+  feesUsd: number;
+  closeReason: PaperCloseReason;
+  tp1Hit: boolean;
+}
+
+export interface PaperSummary {
+  startingBalanceUsd: number;
+  balanceUsd: number;
+  closedTrades: number;
+  openPositions: number;
+  winRate: number;
+  totalPnlUsd: number;
+  totalFeesUsd: number;
+  bestTradeUsd: number;
+  worstTradeUsd: number;
+  lastEventAt: string | null;
+}
+
+export interface PaperState {
+  summary: PaperSummary;
+  openPositions: PaperPosition[];
+  closedTrades: PaperTrade[];
+  lastResetAt: string | null;
+}
+
+export interface BacktestTrade {
+  id: string;
+  symbol: string;
+  timeframe: string;
+  openedAt: string;
+  closedAt: string;
+  entryPrice: number;
+  exitPrice: number;
+  quantity: number;
+  pnlUsd: number;
+  pnlPct: number;
+  feesUsd: number;
+  closeReason: PaperCloseReason;
+  tp1Hit: boolean;
+  durationCandles: number;
+}
+
+export interface BacktestSettings {
+  candles: number;
+  warmup: number;
+  maxSymbols: number;
+  maxHoldCandles: number;
+  feePct: number;
+  startingBalanceUsd: number;
+  timeframes: string[];
+}
+
+export interface BacktestSummary {
+  runId: string | null;
+  status: BacktestRunStatus;
+  startedAt: string | null;
+  completedAt: string | null;
+  symbolsTested: number;
+  timeframes: string[];
+  tradesCount: number;
+  winRate: number;
+  totalPnlUsd: number;
+  totalFeesUsd: number;
+  endingBalanceUsd: number;
+  bestTradeUsd: number;
+  worstTradeUsd: number;
+  maxDrawdownPct: number;
+  profitFactor: number;
+  notes: string[];
+}
+
+export interface BacktestState {
+  summary: BacktestSummary;
+  settings: BacktestSettings;
+  trades: BacktestTrade[];
+  lastError: string | null;
+}
+
 export interface AppConfig {
   port: number;
   scanIntervalMs: number;
@@ -140,10 +253,20 @@ export interface AppConfig {
   aiAnalysisEnabled: boolean;
   aiAnalyzeHoldSignals: boolean;
   timeframes: string[];
+  paperStartingBalanceUsd: number;
+  paperMaxClosedTrades: number;
+  simulationFeePct: number;
+  backtestCandles: number;
+  backtestWarmup: number;
+  backtestMaxSymbols: number;
+  backtestMaxHoldCandles: number;
+  backtestStartingBalanceUsd: number;
 }
 
 export interface StoredState {
   signals: SignalRecord[];
   analyzer: AnalyzerState;
   universe: UniverseState;
+  paper: PaperState;
+  backtest: BacktestState;
 }

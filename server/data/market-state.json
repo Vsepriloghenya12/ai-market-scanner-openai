@@ -14,5 +14,61 @@
     "topSymbols": [],
     "minTurnoverUsd": 2000000,
     "maxSymbolsToAnalyze": 40
+  },
+  "paper": {
+    "summary": {
+      "startingBalanceUsd": 100,
+      "balanceUsd": 100,
+      "closedTrades": 0,
+      "openPositions": 0,
+      "winRate": 0,
+      "totalPnlUsd": 0,
+      "totalFeesUsd": 0,
+      "bestTradeUsd": 0,
+      "worstTradeUsd": 0,
+      "lastEventAt": null
+    },
+    "openPositions": [],
+    "closedTrades": [],
+    "lastResetAt": null
+  },
+  "backtest": {
+    "summary": {
+      "runId": null,
+      "status": "IDLE",
+      "startedAt": null,
+      "completedAt": null,
+      "symbolsTested": 0,
+      "timeframes": [
+        "15",
+        "60"
+      ],
+      "tradesCount": 0,
+      "winRate": 0,
+      "totalPnlUsd": 0,
+      "totalFeesUsd": 0,
+      "endingBalanceUsd": 100,
+      "bestTradeUsd": 0,
+      "worstTradeUsd": 0,
+      "maxDrawdownPct": 0,
+      "profitFactor": 0,
+      "notes": [
+        "Бэктест ещё не запускался."
+      ]
+    },
+    "settings": {
+      "candles": 320,
+      "warmup": 220,
+      "maxSymbols": 8,
+      "maxHoldCandles": 36,
+      "feePct": 0.055,
+      "startingBalanceUsd": 100,
+      "timeframes": [
+        "15",
+        "60"
+      ]
+    },
+    "trades": [],
+    "lastError": null
   }
 }

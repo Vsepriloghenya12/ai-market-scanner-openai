@@ -1,13 +1,162 @@
 <!doctype html>
 <html lang="ru">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Сканер фьючерсов — что купить сейчас</title>
-    <script type="module" crossorigin src="/assets/index-CaBktvxJ.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-BWYXy63g.css">
-  </head>
-  <body>
-    <div id="root"></div>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Проверка сигналов — paper trading и бэктест</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0f172a; --card:#111827; --muted:#94a3b8; --line:#1f2937; --accent:#38bdf8; --green:#22c55e; --yellow:#f59e0b; --red:#ef4444; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family: Inter, Arial, sans-serif; background:linear-gradient(180deg,#020617,#0f172a); color:#e5e7eb; }
+    .wrap { max-width:1200px; margin:0 auto; padding:24px; }
+    h1,h2,h3 { margin:0 0 12px; }
+    p { color:var(--muted); }
+    .grid { display:grid; gap:16px; }
+    .grid-3 { grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); }
+    .card { background:rgba(17,24,39,.9); border:1px solid var(--line); border-radius:20px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,.25); }
+    .muted { color:var(--muted); }
+    .big { font-size:28px; font-weight:700; }
+    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
+    .badge { display:inline-flex; padding:6px 10px; border-radius:999px; font-size:12px; font-weight:700; }
+    .buy { background:rgba(34,197,94,.15); color:#86efac; }
+    .wait { background:rgba(245,158,11,.15); color:#fcd34d; }
+    .exit { background:rgba(239,68,68,.15); color:#fca5a5; }
+    .btn { border:none; border-radius:12px; padding:12px 16px; font-weight:700; cursor:pointer; background:#1d4ed8; color:white; }
+    .btn.secondary { background:#334155; }
+    .btn.warn { background:#991b1b; }
+    .table { width:100%; border-collapse:collapse; }
+    .table th,.table td { border-bottom:1px solid var(--line); padding:10px 8px; text-align:left; font-size:14px; }
+    .table th { color:#cbd5e1; font-weight:700; }
+    .empty { padding:18px; border:1px dashed var(--line); border-radius:16px; color:var(--muted); }
+    .signal { border-left:4px solid var(--accent); padding-left:14px; margin:14px 0; }
+    code { color:#bfdbfe; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row" style="margin-bottom:20px">
+      <div>
+        <h1>Проверка сигналов стратегии</h1>
+        <p>Этот экран нужен не для красивых индикаторов, а чтобы понять: можно ли вообще доверять сигналам на живом рынке.</p>
+      </div>
+      <div class="row">
+        <button class="btn" id="runBacktestBtn">Запустить бэктест</button>
+        <button class="btn secondary" id="reloadBtn">Обновить</button>
+        <button class="btn warn" id="resetPaperBtn">Сбросить paper trading</button>
+      </div>
+    </div>
+
+    <div class="grid grid-3" id="summaryGrid"></div>
+
+    <div class="grid" style="margin-top:18px">
+      <div class="card" id="bestIdeaCard"></div>
+      <div class="card" id="paperCard"></div>
+      <div class="card" id="backtestCard"></div>
+      <div class="card">
+        <h2>Последние paper trading сделки</h2>
+        <div id="paperTrades"></div>
+      </div>
+      <div class="card">
+        <h2>Последние сделки бэктеста</h2>
+        <div id="backtestTrades"></div>
+      </div>
+    </div>
+  </div>
+<script>
+const fmt = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
+const fmt4 = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 4 });
+const price = (v) => Number(v) >= 1000 ? fmt.format(v) : fmt4.format(v);
+const pct = (v) => `${Math.round(Number(v)*100)}%`;
+const badgeClass = (r) => r === 'BUY_NOW' ? 'buy' : r === 'WAIT' ? 'wait' : 'exit';
+const badgeText = (r) => r === 'BUY_NOW' ? 'Покупать сейчас' : r === 'WAIT' ? 'Ждать' : 'Не покупать / выходить';
+
+async function load() {
+  const [overview, opportunities, paper, backtest] = await Promise.all([
+    fetch('/api/overview').then(r=>r.json()),
+    fetch('/api/opportunities').then(r=>r.json()),
+    fetch('/api/paper').then(r=>r.json()),
+    fetch('/api/backtest').then(r=>r.json())
+  ]);
+
+  document.getElementById('summaryGrid').innerHTML = `
+    <div class="card"><div class="muted">Сигналов покупать сейчас</div><div class="big">${overview.summary.BUY_NOW}</div></div>
+    <div class="card"><div class="muted">Виртуальный PnL</div><div class="big">$${fmt.format(paper.summary.totalPnlUsd)}</div></div>
+    <div class="card"><div class="muted">Win rate бэктеста</div><div class="big">${pct(backtest.summary.winRate || 0)}</div></div>
+  `;
+
+  const best = opportunities.bestIdea;
+  document.getElementById('bestIdeaCard').innerHTML = best ? `
+    <h2>Лучшая идея сейчас</h2>
+    <div class="signal">
+      <div class="row"><h3>${best.symbol}</h3><span class="badge ${badgeClass(best.recommendation)}">${badgeText(best.recommendation)}</span></div>
+      <p>${best.headline}</p>
+      <p>Цена сейчас: <strong>${price(best.price)}</strong></p>
+      ${best.tradePlan ? `<p>Вход: <strong>${price(best.tradePlan.entryMin)} – ${price(best.tradePlan.entryMax)}</strong><br>Стоп: <strong>${price(best.tradePlan.stopLoss)}</strong><br>Продажа 1: <strong>${price(best.tradePlan.takeProfit1)}</strong><br>Продажа 2: <strong>${price(best.tradePlan.takeProfit2)}</strong></p>` : '<p>Точный план ещё не сформирован.</p>'}
+      <p class="muted">${best.shortText}</p>
+    </div>` : `<h2>Лучшая идея сейчас</h2><div class="empty">Пока нет ни одной готовой идеи. Нужно подождать следующий цикл сканера.</div>`;
+
+  document.getElementById('paperCard').innerHTML = `
+    <h2>Paper trading</h2>
+    <p>Это симуляция сделок по живым сигналам без реальных денег.</p>
+    <table class="table">
+      <tr><th>Баланс</th><td>$${fmt.format(paper.summary.balanceUsd)}</td></tr>
+      <tr><th>Сделок закрыто</th><td>${paper.summary.closedTrades}</td></tr>
+      <tr><th>Открытых позиций</th><td>${paper.summary.openPositions}</td></tr>
+      <tr><th>Win rate</th><td>${pct(paper.summary.winRate || 0)}</td></tr>
+      <tr><th>Комиссии</th><td>$${fmt.format(paper.summary.totalFeesUsd)}</td></tr>
+    </table>`;
+
+  document.getElementById('backtestCard').innerHTML = `
+    <h2>Последний бэктест</h2>
+    <p>Это проверка, как сигналы вели бы себя на истории.</p>
+    <table class="table">
+      <tr><th>Статус</th><td>${backtest.summary.status}</td></tr>
+      <tr><th>Символов</th><td>${backtest.summary.symbolsTested}</td></tr>
+      <tr><th>Сделок</th><td>${backtest.summary.tradesCount}</td></tr>
+      <tr><th>Итог</th><td>$${fmt.format(backtest.summary.totalPnlUsd)}</td></tr>
+      <tr><th>Profit factor</th><td>${fmt4.format(backtest.summary.profitFactor)}</td></tr>
+      <tr><th>Max drawdown</th><td>${fmt.format(backtest.summary.maxDrawdownPct)}%</td></tr>
+    </table>
+    <p class="muted">${(backtest.summary.notes || []).join(' ')}</p>`;
+
+  const paperRows = (paper.closedTrades || []).slice(0, 12).map(item => `
+    <tr><td>${item.symbol}</td><td>${item.timeframe}</td><td>$${fmt.format(item.pnlUsd)}</td><td>${item.closeReason}</td><td>${item.closedAt ? new Date(item.closedAt).toLocaleString('ru-RU') : '—'}</td></tr>
+  `).join('');
+  document.getElementById('paperTrades').innerHTML = paperRows ? `<table class="table"><thead><tr><th>Монета</th><th>ТФ</th><th>PnL</th><th>Причина</th><th>Когда</th></tr></thead><tbody>${paperRows}</tbody></table>` : `<div class="empty">Пока закрытых виртуальных сделок нет. Подождите несколько циклов сканера или сначала запустите рынок.</div>`;
+
+  const backRows = (backtest.trades || []).slice(0, 20).map(item => `
+    <tr><td>${item.symbol}</td><td>${item.timeframe}</td><td>$${fmt.format(item.pnlUsd)}</td><td>${item.closeReason}</td><td>${item.durationCandles}</td></tr>
+  `).join('');
+  document.getElementById('backtestTrades').innerHTML = backRows ? `<table class="table"><thead><tr><th>Монета</th><th>ТФ</th><th>PnL</th><th>Причина</th><th>Свечей в сделке</th></tr></thead><tbody>${backRows}</tbody></table>` : `<div class="empty">Бэктест ещё не запускался. Нажмите «Запустить бэктест».</div>`;
+}
+
+document.getElementById('reloadBtn').onclick = () => load().catch(err => alert(err.message));
+document.getElementById('resetPaperBtn').onclick = async () => {
+  await fetch('/api/paper/reset', { method:'POST' });
+  await load();
+};
+document.getElementById('runBacktestBtn').onclick = async () => {
+  document.getElementById('runBacktestBtn').disabled = true;
+  document.getElementById('runBacktestBtn').textContent = 'Считаю...';
+  try {
+    const response = await fetch('/api/backtest/run', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({})
+    });
+    const data = await response.json();
+    if (!response.ok || data.ok === false) throw new Error(data.message || 'Бэктест не запустился');
+    await load();
+  } catch (e) {
+    alert(e.message || String(e));
+  } finally {
+    document.getElementById('runBacktestBtn').disabled = false;
+    document.getElementById('runBacktestBtn').textContent = 'Запустить бэктест';
+  }
+};
+load().catch(err => {
+  document.body.innerHTML = `<div class="wrap"><div class="card"><h1>Ошибка загрузки</h1><p>${err.message}</p><p class="muted">Проверьте, что backend отвечает по <code>/api/overview</code>.</p></div></div>`;
+});
+</script>
+</body>
 </html>

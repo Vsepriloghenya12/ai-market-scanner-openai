@@ -1,3 +1,4 @@
+
 import path from 'node:path';
 import { AppConfig } from './types';
 
@@ -49,5 +50,13 @@ export const config: AppConfig = {
   openAiModel: process.env.OPENAI_MODEL?.trim() || 'gpt-5.4-mini',
   aiAnalysisEnabled: parseBoolean(process.env.AI_ANALYSIS_ENABLED, true),
   aiAnalyzeHoldSignals: parseBoolean(process.env.AI_ANALYZE_HOLD_SIGNALS, false),
-  timeframes: parseCsv(process.env.MARKET_TIMEFRAMES, ['15', '60'])
+  timeframes: parseCsv(process.env.MARKET_TIMEFRAMES, ['15', '60']),
+  paperStartingBalanceUsd: Number(process.env.PAPER_STARTING_BALANCE_USD ?? process.env.ACCOUNT_SIZE_USD ?? 100),
+  paperMaxClosedTrades: Number(process.env.PAPER_MAX_CLOSED_TRADES ?? 200),
+  simulationFeePct: Number(process.env.SIMULATION_FEE_PCT ?? 0.055),
+  backtestCandles: Number(process.env.BACKTEST_CANDLES ?? 320),
+  backtestWarmup: Number(process.env.BACKTEST_WARMUP ?? 220),
+  backtestMaxSymbols: Number(process.env.BACKTEST_MAX_SYMBOLS ?? 8),
+  backtestMaxHoldCandles: Number(process.env.BACKTEST_MAX_HOLD_CANDLES ?? 36),
+  backtestStartingBalanceUsd: Number(process.env.BACKTEST_STARTING_BALANCE_USD ?? process.env.ACCOUNT_SIZE_USD ?? 100)
 };

@@ -1,8 +1,10 @@
+
 import crypto from 'node:crypto';
 import { buildIndicatorSnapshot, evaluateSignal } from '../utils/indicators';
 import { MarketSnapshot, SignalRecord } from '../types';
 import { aiAnalysisService } from './aiAnalysisService';
 import { marketDataService } from './marketData';
+import { paperTradingService } from './paperTradingService';
 import { storageService } from './storage';
 
 export class AnalysisService {
@@ -79,6 +81,7 @@ export class AnalysisService {
     record.aiAnalysis = await aiAnalysisService.analyzeSignal(record);
 
     storageService.saveSignal(record);
+    paperTradingService.processSignal(record);
     return record;
   }
 }

@@ -22,6 +22,54 @@ const defaultUniverseState = {
     minTurnoverUsd: config_1.config.minTurnover24hUsd,
     maxSymbolsToAnalyze: config_1.config.maxSymbolsToAnalyze
 };
+const defaultPaperState = () => ({
+    summary: {
+        startingBalanceUsd: config_1.config.paperStartingBalanceUsd,
+        balanceUsd: config_1.config.paperStartingBalanceUsd,
+        closedTrades: 0,
+        openPositions: 0,
+        winRate: 0,
+        totalPnlUsd: 0,
+        totalFeesUsd: 0,
+        bestTradeUsd: 0,
+        worstTradeUsd: 0,
+        lastEventAt: null
+    },
+    openPositions: [],
+    closedTrades: [],
+    lastResetAt: null
+});
+const defaultBacktestState = () => ({
+    summary: {
+        runId: null,
+        status: 'IDLE',
+        startedAt: null,
+        completedAt: null,
+        symbolsTested: 0,
+        timeframes: [...config_1.config.timeframes],
+        tradesCount: 0,
+        winRate: 0,
+        totalPnlUsd: 0,
+        totalFeesUsd: 0,
+        endingBalanceUsd: config_1.config.backtestStartingBalanceUsd,
+        bestTradeUsd: 0,
+        worstTradeUsd: 0,
+        maxDrawdownPct: 0,
+        profitFactor: 0,
+        notes: ['Бэктест ещё не запускался.']
+    },
+    settings: {
+        candles: config_1.config.backtestCandles,
+        warmup: config_1.config.backtestWarmup,
+        maxSymbols: config_1.config.backtestMaxSymbols,
+        maxHoldCandles: config_1.config.backtestMaxHoldCandles,
+        feePct: config_1.config.simulationFeePct,
+        startingBalanceUsd: config_1.config.backtestStartingBalanceUsd,
+        timeframes: [...config_1.config.timeframes]
+    },
+    trades: [],
+    lastError: null
+});
 const ensureStorageDir = () => {
     const directory = node_path_1.default.dirname(config_1.config.storageFile);
     if (!node_fs_1.default.existsSync(directory)) {
@@ -31,10 +79,11 @@ const ensureStorageDir = () => {
 const defaultState = () => ({
     signals: [],
     analyzer: { ...defaultAnalyzerState },
-    universe: { ...defaultUniverseState }
+    universe: { ...defaultUniverseState },
+    paper: defaultPaperState(),
+    backtest: defaultBacktestState()
 });
 class StorageService {
-    state;
     constructor() {
         ensureStorageDir();
         this.state = this.load();
@@ -57,6 +106,29 @@ class StorageService {
                 universe: {
                     ...defaultUniverseState,
                     ...(parsed.universe ?? {})
+                },
+                paper: {
+                    ...defaultPaperState(),
+                    ...(parsed.paper ?? {}),
+                    summary: {
+                        ...defaultPaperState().summary,
+                        ...(parsed.paper?.summary ?? {})
+                    },
+                    openPositions: parsed.paper?.openPositions ?? [],
+                    closedTrades: parsed.paper?.closedTrades ?? []
+                },
+                backtest: {
+                    ...defaultBacktestState(),
+                    ...(parsed.backtest ?? {}),
+                    summary: {
+                        ...defaultBacktestState().summary,
+                        ...(parsed.backtest?.summary ?? {})
+                    },
+                    settings: {
+                        ...defaultBacktestState().settings,
+                        ...(parsed.backtest?.settings ?? {})
+                    },
+                    trades: parsed.backtest?.trades ?? []
                 }
             };
         }
@@ -94,6 +166,40 @@ class StorageService {
             ...this.state.universe,
             ...nextState,
             topSymbols: nextState.topSymbols ? [...nextState.topSymbols] : [...this.state.universe.topSymbols]
+        };
+        this.persist();
+    }
+    getPaperState() {
+        return {
+            ...this.state.paper,
+            summary: { ...this.state.paper.summary },
+            openPositions: [...this.state.paper.openPositions],
+            closedTrades: [...this.state.paper.closedTrades]
+        };
+    }
+    savePaperState(nextState) {
+        this.state.paper = {
+            ...nextState,
+            summary: { ...nextState.summary },
+            openPositions: [...nextState.openPositions],
+            closedTrades: [...nextState.closedTrades]
+        };
+        this.persist();
+    }
+    getBacktestState() {
+        return {
+            ...this.state.backtest,
+            summary: { ...this.state.backtest.summary },
+            settings: { ...this.state.backtest.settings, timeframes: [...this.state.backtest.settings.timeframes] },
+            trades: [...this.state.backtest.trades]
+        };
+    }
+    saveBacktestState(nextState) {
+        this.state.backtest = {
+            ...nextState,
+            summary: { ...nextState.summary, notes: [...nextState.summary.notes], timeframes: [...nextState.summary.timeframes] },
+            settings: { ...nextState.settings, timeframes: [...nextState.settings.timeframes] },
+            trades: [...nextState.trades]
         };
         this.persist();
     }

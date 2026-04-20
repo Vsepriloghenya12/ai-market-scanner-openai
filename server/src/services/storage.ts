@@ -1,7 +1,15 @@
+
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config';
-import { AnalyzerState, SignalRecord, StoredState, UniverseState } from '../types';
+import {
+  AnalyzerState,
+  BacktestState,
+  PaperState,
+  SignalRecord,
+  StoredState,
+  UniverseState
+} from '../types';
 
 const defaultAnalyzerState: AnalyzerState = {
   lastRunAt: null,
@@ -20,6 +28,56 @@ const defaultUniverseState: UniverseState = {
   maxSymbolsToAnalyze: config.maxSymbolsToAnalyze
 };
 
+const defaultPaperState = (): PaperState => ({
+  summary: {
+    startingBalanceUsd: config.paperStartingBalanceUsd,
+    balanceUsd: config.paperStartingBalanceUsd,
+    closedTrades: 0,
+    openPositions: 0,
+    winRate: 0,
+    totalPnlUsd: 0,
+    totalFeesUsd: 0,
+    bestTradeUsd: 0,
+    worstTradeUsd: 0,
+    lastEventAt: null
+  },
+  openPositions: [],
+  closedTrades: [],
+  lastResetAt: null
+});
+
+const defaultBacktestState = (): BacktestState => ({
+  summary: {
+    runId: null,
+    status: 'IDLE',
+    startedAt: null,
+    completedAt: null,
+    symbolsTested: 0,
+    timeframes: [...config.timeframes],
+    tradesCount: 0,
+    winRate: 0,
+    totalPnlUsd: 0,
+    totalFeesUsd: 0,
+    endingBalanceUsd: config.backtestStartingBalanceUsd,
+    bestTradeUsd: 0,
+    worstTradeUsd: 0,
+    maxDrawdownPct: 0,
+    profitFactor: 0,
+    notes: ['Бэктест ещё не запускался.']
+  },
+  settings: {
+    candles: config.backtestCandles,
+    warmup: config.backtestWarmup,
+    maxSymbols: config.backtestMaxSymbols,
+    maxHoldCandles: config.backtestMaxHoldCandles,
+    feePct: config.simulationFeePct,
+    startingBalanceUsd: config.backtestStartingBalanceUsd,
+    timeframes: [...config.timeframes]
+  },
+  trades: [],
+  lastError: null
+});
+
 const ensureStorageDir = (): void => {
   const directory = path.dirname(config.storageFile);
   if (!fs.existsSync(directory)) {
@@ -30,7 +88,9 @@ const ensureStorageDir = (): void => {
 const defaultState = (): StoredState => ({
   signals: [],
   analyzer: { ...defaultAnalyzerState },
-  universe: { ...defaultUniverseState }
+  universe: { ...defaultUniverseState },
+  paper: defaultPaperState(),
+  backtest: defaultBacktestState()
 });
 
 export class StorageService {
@@ -60,6 +120,29 @@ export class StorageService {
         universe: {
           ...defaultUniverseState,
           ...(parsed.universe ?? {})
+        },
+        paper: {
+          ...defaultPaperState(),
+          ...(parsed.paper ?? {}),
+          summary: {
+            ...defaultPaperState().summary,
+            ...(parsed.paper?.summary ?? {})
+          },
+          openPositions: parsed.paper?.openPositions ?? [],
+          closedTrades: parsed.paper?.closedTrades ?? []
+        },
+        backtest: {
+          ...defaultBacktestState(),
+          ...(parsed.backtest ?? {}),
+          summary: {
+            ...defaultBacktestState().summary,
+            ...(parsed.backtest?.summary ?? {})
+          },
+          settings: {
+            ...defaultBacktestState().settings,
+            ...(parsed.backtest?.settings ?? {})
+          },
+          trades: parsed.backtest?.trades ?? []
         }
       };
     } catch (error) {
@@ -105,6 +188,44 @@ export class StorageService {
       ...this.state.universe,
       ...nextState,
       topSymbols: nextState.topSymbols ? [...nextState.topSymbols] : [...this.state.universe.topSymbols]
+    };
+    this.persist();
+  }
+
+  public getPaperState(): PaperState {
+    return {
+      ...this.state.paper,
+      summary: { ...this.state.paper.summary },
+      openPositions: [...this.state.paper.openPositions],
+      closedTrades: [...this.state.paper.closedTrades]
+    };
+  }
+
+  public savePaperState(nextState: PaperState): void {
+    this.state.paper = {
+      ...nextState,
+      summary: { ...nextState.summary },
+      openPositions: [...nextState.openPositions],
+      closedTrades: [...nextState.closedTrades]
+    };
+    this.persist();
+  }
+
+  public getBacktestState(): BacktestState {
+    return {
+      ...this.state.backtest,
+      summary: { ...this.state.backtest.summary },
+      settings: { ...this.state.backtest.settings, timeframes: [...this.state.backtest.settings.timeframes] },
+      trades: [...this.state.backtest.trades]
+    };
+  }
+
+  public saveBacktestState(nextState: BacktestState): void {
+    this.state.backtest = {
+      ...nextState,
+      summary: { ...nextState.summary, notes: [...nextState.summary.notes], timeframes: [...nextState.summary.timeframes] },
+      settings: { ...nextState.settings, timeframes: [...nextState.settings.timeframes] },
+      trades: [...nextState.trades]
     };
     this.persist();
   }

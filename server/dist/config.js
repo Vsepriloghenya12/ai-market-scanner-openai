@@ -29,7 +29,7 @@ const parseOptionalString = (value) => {
 };
 exports.config = {
     port: Number(process.env.PORT ?? 3001),
-    scanIntervalMs: Number(process.env.SCAN_INTERVAL_MS ?? 60_000),
+    scanIntervalMs: Number(process.env.SCAN_INTERVAL_MS ?? 60000),
     bybitCategory: process.env.BYBIT_CATEGORY ?? 'linear',
     historyLimit: Number(process.env.HISTORY_LIMIT ?? 1000),
     corsOrigin: process.env.CORS_ORIGIN ?? '*',
@@ -41,11 +41,19 @@ exports.config = {
     minConfidenceActionable: Number(process.env.MIN_CONFIDENCE_ACTIONABLE ?? 0.68),
     quoteCoin: process.env.MARKET_QUOTE_COIN?.trim() || 'USDT',
     maxSymbolsToAnalyze: Number(process.env.MAX_SYMBOLS_TO_ANALYZE ?? 40),
-    minTurnover24hUsd: Number(process.env.MIN_TURNOVER_24H_USD ?? 2_000_000),
+    minTurnover24hUsd: Number(process.env.MIN_TURNOVER_24H_USD ?? 2000000),
     maxSpreadPct: Number(process.env.MAX_SPREAD_PCT ?? 0.45),
     openAiApiKey: parseOptionalString(process.env.OPENAI_API_KEY),
     openAiModel: process.env.OPENAI_MODEL?.trim() || 'gpt-5.4-mini',
     aiAnalysisEnabled: parseBoolean(process.env.AI_ANALYSIS_ENABLED, true),
     aiAnalyzeHoldSignals: parseBoolean(process.env.AI_ANALYZE_HOLD_SIGNALS, false),
-    timeframes: parseCsv(process.env.MARKET_TIMEFRAMES, ['15', '60'])
+    timeframes: parseCsv(process.env.MARKET_TIMEFRAMES, ['15', '60']),
+    paperStartingBalanceUsd: Number(process.env.PAPER_STARTING_BALANCE_USD ?? process.env.ACCOUNT_SIZE_USD ?? 100),
+    paperMaxClosedTrades: Number(process.env.PAPER_MAX_CLOSED_TRADES ?? 200),
+    simulationFeePct: Number(process.env.SIMULATION_FEE_PCT ?? 0.055),
+    backtestCandles: Number(process.env.BACKTEST_CANDLES ?? 320),
+    backtestWarmup: Number(process.env.BACKTEST_WARMUP ?? 220),
+    backtestMaxSymbols: Number(process.env.BACKTEST_MAX_SYMBOLS ?? 8),
+    backtestMaxHoldCandles: Number(process.env.BACKTEST_MAX_HOLD_CANDLES ?? 36),
+    backtestStartingBalanceUsd: Number(process.env.BACKTEST_STARTING_BALANCE_USD ?? process.env.ACCOUNT_SIZE_USD ?? 100)
 };

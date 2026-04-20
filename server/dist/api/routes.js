@@ -4,6 +4,8 @@ exports.apiRouter = void 0;
 const express_1 = require("express");
 const config_1 = require("../config");
 const aiAnalysisService_1 = require("../services/aiAnalysisService");
+const backtestService_1 = require("../services/backtestService");
+const paperTradingService_1 = require("../services/paperTradingService");
 const strategy_1 = require("../services/strategy");
 const storage_1 = require("../services/storage");
 exports.apiRouter = (0, express_1.Router)();
@@ -42,11 +44,15 @@ exports.apiRouter.get('/health', (_request, response) => {
             maxSymbolsToAnalyze: config_1.config.maxSymbolsToAnalyze,
             minTurnover24hUsd: config_1.config.minTurnover24hUsd,
             maxSpreadPct: config_1.config.maxSpreadPct,
-            timeframes: config_1.config.timeframes
+            timeframes: config_1.config.timeframes,
+            backtestMaxSymbols: config_1.config.backtestMaxSymbols,
+            backtestCandles: config_1.config.backtestCandles
         },
         analyzer: storage_1.storageService.getAnalyzerState(),
         universe: storage_1.storageService.getUniverseState(),
-        ai: aiAnalysisService_1.aiAnalysisService.getStatus()
+        ai: aiAnalysisService_1.aiAnalysisService.getStatus(),
+        paper: paperTradingService_1.paperTradingService.getState().summary,
+        backtest: backtestService_1.backtestService.getState().summary
     });
 });
 exports.apiRouter.get('/signals', (request, response) => {
@@ -126,7 +132,9 @@ exports.apiRouter.get('/overview', (_request, response) => {
             minConfidenceActionable: config_1.config.minConfidenceActionable
         },
         ai: aiAnalysisService_1.aiAnalysisService.getStatus(),
-        timeframes: config_1.config.timeframes
+        timeframes: config_1.config.timeframes,
+        paper: paperTradingService_1.paperTradingService.getState().summary,
+        backtest: backtestService_1.backtestService.getState().summary
     });
 });
 exports.apiRouter.get('/strategy', (_request, response) => {
@@ -137,4 +145,33 @@ exports.apiRouter.get('/strategy', (_request, response) => {
 });
 exports.apiRouter.get('/ai/status', (_request, response) => {
     response.json(aiAnalysisService_1.aiAnalysisService.getStatus());
+});
+exports.apiRouter.get('/paper', (_request, response) => {
+    response.json(paperTradingService_1.paperTradingService.getState());
+});
+exports.apiRouter.post('/paper/reset', (_request, response) => {
+    response.json({
+        ok: true,
+        paper: paperTradingService_1.paperTradingService.reset()
+    });
+});
+exports.apiRouter.get('/backtest', (_request, response) => {
+    response.json(backtestService_1.backtestService.getState());
+});
+exports.apiRouter.post('/backtest/run', async (request, response) => {
+    try {
+        const body = (request.body ?? {});
+        const result = await backtestService_1.backtestService.run({
+            maxSymbols: body.maxSymbols,
+            candles: body.candles,
+            warmup: body.warmup,
+            maxHoldCandles: body.maxHoldCandles,
+            timeframes: body.timeframes
+        });
+        response.json({ ok: true, result });
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : 'Неизвестная ошибка бэктеста';
+        response.status(500).json({ ok: false, message });
+    }
 });

@@ -8,6 +8,7 @@ const node_crypto_1 = __importDefault(require("node:crypto"));
 const indicators_1 = require("../utils/indicators");
 const aiAnalysisService_1 = require("./aiAnalysisService");
 const marketData_1 = require("./marketData");
+const paperTradingService_1 = require("./paperTradingService");
 const storage_1 = require("./storage");
 class AnalysisService {
     async analyze(market, timeframe) {
@@ -77,6 +78,7 @@ class AnalysisService {
         };
         record.aiAnalysis = await aiAnalysisService_1.aiAnalysisService.analyzeSignal(record);
         storage_1.storageService.saveSignal(record);
+        paperTradingService_1.paperTradingService.processSignal(record);
         return record;
     }
 }

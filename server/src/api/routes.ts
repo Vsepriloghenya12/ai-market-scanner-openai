@@ -1,7 +1,10 @@
+
 import { Router } from 'express';
 import { config } from '../config';
 import { RecommendationType, SignalRecord } from '../types';
 import { aiAnalysisService } from '../services/aiAnalysisService';
+import { backtestService } from '../services/backtestService';
+import { paperTradingService } from '../services/paperTradingService';
 import { strategyMeta, strategyRules } from '../services/strategy';
 import { storageService } from '../services/storage';
 
@@ -47,11 +50,15 @@ apiRouter.get('/health', (_request, response) => {
       maxSymbolsToAnalyze: config.maxSymbolsToAnalyze,
       minTurnover24hUsd: config.minTurnover24hUsd,
       maxSpreadPct: config.maxSpreadPct,
-      timeframes: config.timeframes
+      timeframes: config.timeframes,
+      backtestMaxSymbols: config.backtestMaxSymbols,
+      backtestCandles: config.backtestCandles
     },
     analyzer: storageService.getAnalyzerState(),
     universe: storageService.getUniverseState(),
-    ai: aiAnalysisService.getStatus()
+    ai: aiAnalysisService.getStatus(),
+    paper: paperTradingService.getState().summary,
+    backtest: backtestService.getState().summary
   });
 });
 
@@ -103,7 +110,8 @@ apiRouter.get('/opportunities', (_request, response) => {
   const latest = Array.from(latestMap.values()).sort(sortSignals);
 
   response.json({
-    bestIdea: latest.find((item) => item.recommendation === 'BUY_NOW') ?? latest.find((item) => item.recommendation === 'WAIT') ?? null,
+    bestIdea:
+      latest.find((item) => item.recommendation === 'BUY_NOW') ?? latest.find((item) => item.recommendation === 'WAIT') ?? null,
     buyNow: latest.filter((item) => item.recommendation === 'BUY_NOW').slice(0, 8),
     wait: latest.filter((item) => item.recommendation === 'WAIT').slice(0, 12),
     exit: latest.filter((item) => item.recommendation === 'EXIT').slice(0, 12)
@@ -150,7 +158,9 @@ apiRouter.get('/overview', (_request, response) => {
       minConfidenceActionable: config.minConfidenceActionable
     },
     ai: aiAnalysisService.getStatus(),
-    timeframes: config.timeframes
+    timeframes: config.timeframes,
+    paper: paperTradingService.getState().summary,
+    backtest: backtestService.getState().summary
   });
 });
 
@@ -163,4 +173,44 @@ apiRouter.get('/strategy', (_request, response) => {
 
 apiRouter.get('/ai/status', (_request, response) => {
   response.json(aiAnalysisService.getStatus());
+});
+
+apiRouter.get('/paper', (_request, response) => {
+  response.json(paperTradingService.getState());
+});
+
+apiRouter.post('/paper/reset', (_request, response) => {
+  response.json({
+    ok: true,
+    paper: paperTradingService.reset()
+  });
+});
+
+apiRouter.get('/backtest', (_request, response) => {
+  response.json(backtestService.getState());
+});
+
+apiRouter.post('/backtest/run', async (request, response) => {
+  try {
+    const body = (request.body ?? {}) as Partial<{
+      maxSymbols: number;
+      candles: number;
+      warmup: number;
+      maxHoldCandles: number;
+      timeframes: string[];
+    }>;
+
+    const result = await backtestService.run({
+      maxSymbols: body.maxSymbols,
+      candles: body.candles,
+      warmup: body.warmup,
+      maxHoldCandles: body.maxHoldCandles,
+      timeframes: body.timeframes
+    });
+
+    response.json({ ok: true, result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Неизвестная ошибка бэктеста';
+    response.status(500).json({ ok: false, message });
+  }
 });
