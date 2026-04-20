@@ -38,31 +38,45 @@ const toNumber = (value: string | undefined): number => {
 
 export class MarketDataService {
   public async fetchCandles(symbol: string, interval: string, limit = 240): Promise<Candle[]> {
-    const response = await bybitClient.get<BybitKlineResponse>('/v5/market/kline', {
-      params: {
-        category: config.bybitCategory,
-        symbol,
-        interval,
-        limit
+    let attempts = 0;
+
+    while (attempts < 3) {
+      attempts += 1;
+
+      const response = await bybitClient.get<BybitKlineResponse>('/v5/market/kline', {
+        params: {
+          category: config.bybitCategory,
+          symbol,
+          interval,
+          limit
+        }
+      });
+
+      const payload = response.data;
+
+      if (payload.retCode === 0 && payload.result?.list) {
+        return payload.result.list
+          .map((item) => ({
+            timestamp: Number(item[0]),
+            open: Number(item[1]),
+            high: Number(item[2]),
+            low: Number(item[3]),
+            close: Number(item[4]),
+            volume: Number(item[5])
+          }))
+          .sort((left, right) => left.timestamp - right.timestamp);
       }
-    });
 
-    const payload = response.data;
+      const isRateLimit = payload.retCode === 10006 || payload.retMsg?.toLowerCase().includes('rate limit');
+      if (isRateLimit && attempts < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 4_000 * attempts));
+        continue;
+      }
 
-    if (payload.retCode !== 0 || !payload.result?.list) {
       throw new Error(`Ошибка Bybit для ${symbol}/${interval}: ${payload.retMsg}`);
     }
 
-    return payload.result.list
-      .map((item) => ({
-        timestamp: Number(item[0]),
-        open: Number(item[1]),
-        high: Number(item[2]),
-        low: Number(item[3]),
-        close: Number(item[4]),
-        volume: Number(item[5])
-      }))
-      .sort((left, right) => left.timestamp - right.timestamp);
+    throw new Error(`Ошибка Bybit для ${symbol}/${interval}: не удалось получить свечи`);
   }
 
   public async fetchUniverse(): Promise<{

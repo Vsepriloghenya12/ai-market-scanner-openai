@@ -4,6 +4,8 @@ import { analysisService } from './analysisService';
 import { marketDataService } from './marketData';
 import { storageService } from './storage';
 
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
 const runWithConcurrency = async <T>(items: T[], limit: number, handler: (item: T) => Promise<void>): Promise<void> => {
   const queue = [...items];
 
@@ -14,6 +16,7 @@ const runWithConcurrency = async <T>(items: T[], limit: number, handler: (item: 
         return;
       }
       await handler(item);
+      await sleep(350);
     }
   });
 
@@ -67,7 +70,7 @@ export class SchedulerService {
         maxSymbolsToAnalyze: config.maxSymbolsToAnalyze
       });
 
-      await runWithConcurrency(jobs, 4, async ({ market, timeframe }) => {
+      await runWithConcurrency(jobs, 2, async ({ market, timeframe }) => {
         try {
           await analysisService.analyze(market, timeframe);
         } catch (error) {

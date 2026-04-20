@@ -31,93 +31,18 @@ export interface TradePlan {
   exitComment: string;
 }
 
-export interface AIAnalysis {
-  status: 'READY' | 'SKIPPED' | 'ERROR';
-  provider: 'openai';
-  model: string | null;
-  generatedAt: string;
-  verdict: 'BUY' | 'SELL' | 'HOLD';
-  confidence: number | null;
-  alignmentWithRules: 'ALIGNED' | 'MIXED' | 'CONTRARIAN';
-  summary: string;
-  marketNarrative: string;
-  strengths: string[];
-  risks: string[];
-  checklist: string[];
-  entryStyle: string;
-  exitStyle: string;
-  invalidation: string;
-  positionSizingNote: string;
-  nextAction: string;
-  error: string | null;
-}
-
 export interface SignalItem {
   id: string;
   symbol: string;
   timeframe: string;
-  signal: 'BUY' | 'SELL' | 'HOLD';
   recommendation: 'BUY_NOW' | 'WAIT' | 'EXIT';
   confidence: number;
-  score: number;
   price: number;
   createdAt: string;
-  regime: 'BULL' | 'BEAR' | 'RANGE';
-  setup: 'BREAKOUT' | 'PULLBACK' | 'BREAKDOWN' | 'NONE';
-  actionable: boolean;
   headline: string;
   shortText: string;
-  reason: string[];
-  indicators: {
-    emaFast: number;
-    emaMedium: number;
-    emaTrend: number;
-    rsi: number;
-    atr: number;
-    adx: number;
-    momentumPct: number;
-    volatilityPct: number;
-    volumeRatio: number;
-    swingHigh20: number;
-    swingLow20: number;
-    trendGapPct: number;
-  };
-  market: {
-    symbol: string;
-    rank24h: number;
-    turnover24hUsd: number;
-    volume24h: number;
-    spreadPct: number;
-    lastPrice: number;
-    fundingRate: number | null;
-  };
   tradePlan: TradePlan | null;
-  aiAnalysis: AIAnalysis | null;
-}
-
-export interface OverviewResponse {
-  summary: {
-    total: number;
-    BUY_NOW: number;
-    WAIT: number;
-    EXIT: number;
-    aiReady: number;
-  };
-  analyzer: AnalyzerState;
-  universe: UniverseState;
-  risk: {
-    accountSizeUsd: number;
-    riskPerTradePct: number;
-    minConfidenceActionable: number;
-  };
-  ai: {
-    enabled: boolean;
-    configured: boolean;
-    ready: boolean;
-    model: string;
-    analyzeHoldSignals: boolean;
-  };
-  timeframes: string[];
+  reason: string[];
 }
 
 export interface OpportunitiesResponse {
@@ -127,8 +52,50 @@ export interface OpportunitiesResponse {
   exit: SignalItem[];
 }
 
-const request = async <T>(path: string): Promise<T> => {
-  const response = await fetch(path);
+export interface PaperPosition {
+  id: string;
+  symbol: string;
+  timeframe: string;
+  entryPrice: number;
+  stopLoss: number;
+  takeProfit1: number;
+  takeProfit2: number;
+}
+
+export interface PaperTrade {
+  id: string;
+  symbol: string;
+  timeframe: string;
+  entryPrice: number;
+  exitPrice: number;
+  pnlUsd: number;
+  closeReason: string;
+  closedAt: string;
+}
+
+export interface PaperState {
+  summary: {
+    startingBalanceUsd: number;
+    balanceUsd: number;
+    closedTrades: number;
+    openPositions: number;
+    winRate: number;
+    totalPnlUsd: number;
+    totalFeesUsd: number;
+    lastEventAt: string | null;
+  };
+  openPositions: PaperPosition[];
+  closedTrades: PaperTrade[];
+}
+
+export interface HealthResponse {
+  analyzer: AnalyzerState;
+  universe: UniverseState;
+  paper: PaperState['summary'];
+}
+
+const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
+  const response = await fetch(path, init);
   if (!response.ok) {
     throw new Error(`Ошибка запроса: ${response.status}`);
   }
@@ -136,9 +103,14 @@ const request = async <T>(path: string): Promise<T> => {
 };
 
 export const api = {
-  getOverview: () => request<OverviewResponse>('/api/overview'),
+  getHealth: () => request<HealthResponse>('/api/health'),
   getOpportunities: () => request<OpportunitiesResponse>('/api/opportunities'),
-  getSignals: (limit = 100) => request<{ items: SignalItem[] }>(`/api/signals?limit=${limit}`),
-  getHealth: () => request<{ analyzer: AnalyzerState; config: Record<string, unknown> }>('/api/health'),
-  getAiStatus: () => request<OverviewResponse['ai']>('/api/ai/status')
+  getPaper: () => request<PaperState>('/api/paper'),
+  getSignalsLatest: () => request<{ items: SignalItem[] }>('/api/signals/latest'),
+  resetPaper: () => request<PaperState>('/api/paper/reset', { method: 'POST' })
+};
+
+
+export const downloadFullExport = (): void => {
+  window.location.href = '/api/export/full';
 };

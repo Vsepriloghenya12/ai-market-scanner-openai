@@ -5,6 +5,7 @@ const config_1 = require("../config");
 const analysisService_1 = require("./analysisService");
 const marketData_1 = require("./marketData");
 const storage_1 = require("./storage");
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const runWithConcurrency = async (items, limit, handler) => {
     const queue = [...items];
     const workers = Array.from({ length: Math.max(1, limit) }, async () => {
@@ -14,6 +15,7 @@ const runWithConcurrency = async (items, limit, handler) => {
                 return;
             }
             await handler(item);
+            await sleep(350);
         }
     });
     await Promise.all(workers);
@@ -56,7 +58,7 @@ class SchedulerService {
                 minTurnoverUsd: config_1.config.minTurnover24hUsd,
                 maxSymbolsToAnalyze: config_1.config.maxSymbolsToAnalyze
             });
-            await runWithConcurrency(jobs, 4, async ({ market, timeframe }) => {
+            await runWithConcurrency(jobs, 2, async ({ market, timeframe }) => {
                 try {
                     await analysisService_1.analysisService.analyze(market, timeframe);
                 }

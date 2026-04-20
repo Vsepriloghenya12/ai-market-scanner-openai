@@ -146,6 +146,52 @@ exports.apiRouter.get('/strategy', (_request, response) => {
 exports.apiRouter.get('/ai/status', (_request, response) => {
     response.json(aiAnalysisService_1.aiAnalysisService.getStatus());
 });
+
+exports.apiRouter.get('/export/full', (_request, response) => {
+    const signals = storage_1.storageService.getSignals();
+    const paper = paperTradingService_1.paperTradingService.getState();
+    const backtest = backtestService_1.backtestService.getState();
+    const analyzer = storage_1.storageService.getAnalyzerState();
+    const universe = storage_1.storageService.getUniverseState();
+    const generatedAt = new Date().toISOString();
+    const payload = {
+        exportedAt: generatedAt,
+        app: {
+            name: 'ai-futures-live-demo-russian',
+            purpose: 'Сигналы рынка + демо-счёт + полная статистика',
+            formatVersion: 1
+        },
+        config: {
+            scanIntervalMs: config_1.config.scanIntervalMs,
+            bybitCategory: config_1.config.bybitCategory,
+            accountSizeUsd: config_1.config.accountSizeUsd,
+            riskPerTradePct: config_1.config.riskPerTradePct,
+            minConfidenceActionable: config_1.config.minConfidenceActionable,
+            maxSymbolsToAnalyze: config_1.config.maxSymbolsToAnalyze,
+            minTurnover24hUsd: config_1.config.minTurnover24hUsd,
+            maxSpreadPct: config_1.config.maxSpreadPct,
+            timeframes: config_1.config.timeframes,
+            paperStartingBalanceUsd: config_1.config.paperStartingBalanceUsd,
+            simulationFeePct: config_1.config.simulationFeePct
+        },
+        summary: {
+            analyzer,
+            universe,
+            paper: paper.summary,
+            backtest: backtest.summary,
+            signalsCount: signals.length,
+            latestSignalsCount: new Set(signals.map((item) => `${item.symbol}:${item.timeframe}`)).size
+        },
+        signals,
+        paper,
+        backtest
+    };
+    const safeStamp = generatedAt.replace(/[:.]/g, '-');
+    response.setHeader('Content-Type', 'application/json; charset=utf-8');
+    response.setHeader('Content-Disposition', `attachment; filename="full-statistics-${safeStamp}.json"`);
+    response.status(200).send(JSON.stringify(payload, null, 2));
+});
+
 exports.apiRouter.get('/paper', (_request, response) => {
     response.json(paperTradingService_1.paperTradingService.getState());
 });

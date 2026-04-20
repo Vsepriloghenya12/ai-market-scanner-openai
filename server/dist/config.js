@@ -29,7 +29,7 @@ const parseOptionalString = (value) => {
 };
 exports.config = {
     port: Number(process.env.PORT ?? 3001),
-    scanIntervalMs: Number(process.env.SCAN_INTERVAL_MS ?? 60000),
+    scanIntervalMs: Number(process.env.SCAN_INTERVAL_MS ?? 180000),
     bybitCategory: process.env.BYBIT_CATEGORY ?? 'linear',
     historyLimit: Number(process.env.HISTORY_LIMIT ?? 1000),
     corsOrigin: process.env.CORS_ORIGIN ?? '*',
@@ -40,7 +40,7 @@ exports.config = {
     riskPerTradePct: Number(process.env.RISK_PER_TRADE_PCT ?? 1),
     minConfidenceActionable: Number(process.env.MIN_CONFIDENCE_ACTIONABLE ?? 0.68),
     quoteCoin: process.env.MARKET_QUOTE_COIN?.trim() || 'USDT',
-    maxSymbolsToAnalyze: Number(process.env.MAX_SYMBOLS_TO_ANALYZE ?? 40),
+    maxSymbolsToAnalyze: Number(process.env.MAX_SYMBOLS_TO_ANALYZE ?? 20),
     minTurnover24hUsd: Number(process.env.MIN_TURNOVER_24H_USD ?? 2000000),
     maxSpreadPct: Number(process.env.MAX_SPREAD_PCT ?? 0.45),
     openAiApiKey: parseOptionalString(process.env.OPENAI_API_KEY),

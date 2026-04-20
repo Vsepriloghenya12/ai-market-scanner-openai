@@ -16,28 +16,38 @@ const toNumber = (value) => {
 };
 class MarketDataService {
     async fetchCandles(symbol, interval, limit = 240) {
-        const response = await bybitClient.get('/v5/market/kline', {
-            params: {
-                category: config_1.config.bybitCategory,
-                symbol,
-                interval,
-                limit
+        let attempts = 0;
+        while (attempts < 3) {
+            attempts += 1;
+            const response = await bybitClient.get('/v5/market/kline', {
+                params: {
+                    category: config_1.config.bybitCategory,
+                    symbol,
+                    interval,
+                    limit
+                }
+            });
+            const payload = response.data;
+            if (payload.retCode === 0 && payload.result?.list) {
+                return payload.result.list
+                    .map((item) => ({
+                    timestamp: Number(item[0]),
+                    open: Number(item[1]),
+                    high: Number(item[2]),
+                    low: Number(item[3]),
+                    close: Number(item[4]),
+                    volume: Number(item[5])
+                }))
+                    .sort((left, right) => left.timestamp - right.timestamp);
             }
-        });
-        const payload = response.data;
-        if (payload.retCode !== 0 || !payload.result?.list) {
+            const isRateLimit = payload.retCode === 10006 || payload.retMsg?.toLowerCase().includes('rate limit');
+            if (isRateLimit && attempts < 3) {
+                await new Promise((resolve) => setTimeout(resolve, 4000 * attempts));
+                continue;
+            }
             throw new Error(`Ошибка Bybit для ${symbol}/${interval}: ${payload.retMsg}`);
         }
-        return payload.result.list
-            .map((item) => ({
-            timestamp: Number(item[0]),
-            open: Number(item[1]),
-            high: Number(item[2]),
-            low: Number(item[3]),
-            close: Number(item[4]),
-            volume: Number(item[5])
-        }))
-            .sort((left, right) => left.timestamp - right.timestamp);
+        throw new Error(`Ошибка Bybit для ${symbol}/${interval}: не удалось получить свечи`);
     }
     async fetchUniverse() {
         const response = await bybitClient.get('/v5/market/tickers', {

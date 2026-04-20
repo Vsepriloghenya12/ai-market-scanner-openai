@@ -175,6 +175,55 @@ apiRouter.get('/ai/status', (_request, response) => {
   response.json(aiAnalysisService.getStatus());
 });
 
+
+
+apiRouter.get('/export/full', (_request, response) => {
+  const signals = storageService.getSignals();
+  const paper = paperTradingService.getState();
+  const backtest = backtestService.getState();
+  const analyzer = storageService.getAnalyzerState();
+  const universe = storageService.getUniverseState();
+  const generatedAt = new Date().toISOString();
+
+  const payload = {
+    exportedAt: generatedAt,
+    app: {
+      name: 'ai-futures-live-demo-russian',
+      purpose: 'Сигналы рынка + демо-счёт + полная статистика',
+      formatVersion: 1
+    },
+    config: {
+      scanIntervalMs: config.scanIntervalMs,
+      bybitCategory: config.bybitCategory,
+      accountSizeUsd: config.accountSizeUsd,
+      riskPerTradePct: config.riskPerTradePct,
+      minConfidenceActionable: config.minConfidenceActionable,
+      maxSymbolsToAnalyze: config.maxSymbolsToAnalyze,
+      minTurnover24hUsd: config.minTurnover24hUsd,
+      maxSpreadPct: config.maxSpreadPct,
+      timeframes: config.timeframes,
+      paperStartingBalanceUsd: config.paperStartingBalanceUsd,
+      simulationFeePct: config.simulationFeePct
+    },
+    summary: {
+      analyzer,
+      universe,
+      paper: paper.summary,
+      backtest: backtest.summary,
+      signalsCount: signals.length,
+      latestSignalsCount: new Set(signals.map((item) => `${item.symbol}:${item.timeframe}`)).size
+    },
+    signals,
+    paper,
+    backtest
+  };
+
+  const safeStamp = generatedAt.replace(/[:.]/g, '-');
+  response.setHeader('Content-Type', 'application/json; charset=utf-8');
+  response.setHeader('Content-Disposition', `attachment; filename="full-statistics-${safeStamp}.json"`);
+  response.status(200).send(JSON.stringify(payload, null, 2));
+});
+
 apiRouter.get('/paper', (_request, response) => {
   response.json(paperTradingService.getState());
 });
