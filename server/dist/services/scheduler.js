@@ -39,6 +39,9 @@ class SchedulerService {
             this.timer = null;
         }
     }
+    async runNow() {
+        await this.runCycle();
+    }
     async runCycle() {
         if (this.running) {
             return;

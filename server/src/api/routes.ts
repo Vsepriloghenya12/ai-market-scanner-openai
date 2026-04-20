@@ -7,6 +7,7 @@ import { backtestService } from '../services/backtestService';
 import { paperTradingService } from '../services/paperTradingService';
 import { strategyMeta, strategyRules } from '../services/strategy';
 import { storageService } from '../services/storage';
+import { schedulerService } from '../services/scheduler';
 
 export const apiRouter = Router();
 
@@ -228,11 +229,20 @@ apiRouter.get('/paper', (_request, response) => {
   response.json(paperTradingService.getState());
 });
 
+apiRouter.post('/analyze/now', async (_request, response) => {
+  try {
+    await schedulerService.runNow();
+    response.json({ ok: true });
+  } catch (error) {
+    response.status(500).json({
+      ok: false,
+      message: error instanceof Error ? error.message : 'Ошибка ручного запуска анализа'
+    });
+  }
+});
+
 apiRouter.post('/paper/reset', (_request, response) => {
-  response.json({
-    ok: true,
-    paper: paperTradingService.reset()
-  });
+  response.json(paperTradingService.reset());
 });
 
 apiRouter.get('/backtest', (_request, response) => {

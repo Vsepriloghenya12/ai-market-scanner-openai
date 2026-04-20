@@ -56,6 +56,8 @@ function SignalCard({ item }: { item: SignalItem }) {
 export default function App() {
   const [data, setData] = useState<DashboardState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -77,6 +79,34 @@ export default function App() {
     const timer = window.setInterval(load, 15000);
     return () => window.clearInterval(timer);
   }, [load]);
+
+  const handleRefreshNow = async () => {
+    try {
+      setBusy(true);
+      setMessage('Запускаю новый анализ рынка...');
+      await api.runAnalyzeNow();
+      await load();
+      setMessage('Рынок обновлён.');
+    } catch (loadError) {
+      setMessage(loadError instanceof Error ? loadError.message : 'Не удалось обновить рынок');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleResetPaper = async () => {
+    try {
+      setBusy(true);
+      setMessage('Сбрасываю демо-счёт...');
+      await api.resetPaper();
+      await load();
+      setMessage('Демо-счёт сброшен.');
+    } catch (loadError) {
+      setMessage(loadError instanceof Error ? loadError.message : 'Не удалось сбросить демо-счёт');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (error) {
     return <div className="page"><div className="hero-card">Ошибка: {error}</div></div>;
@@ -141,9 +171,11 @@ export default function App() {
           Комиссии: ${formatMoney(paper.summary.totalFeesUsd)}
         </p>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <button onClick={downloadFullExport}>Выгрузить полную статистику</button>
-          <button onClick={() => api.resetPaper().then(load)}>Сбросить демо-счёт</button>
+          <button onClick={downloadFullExport} disabled={busy}>Выгрузить полную статистику</button>
+          <button onClick={handleRefreshNow} disabled={busy}>Обновить сейчас</button>
+          <button onClick={handleResetPaper} disabled={busy}>Сбросить демо-счёт</button>
         </div>
+        {message ? <p style={{ marginTop: 12 }}>{message}</p> : null}
       </section>
 
       <section className="columns">

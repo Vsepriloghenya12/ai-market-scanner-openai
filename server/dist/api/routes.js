@@ -8,6 +8,7 @@ const backtestService_1 = require("../services/backtestService");
 const paperTradingService_1 = require("../services/paperTradingService");
 const strategy_1 = require("../services/strategy");
 const storage_1 = require("../services/storage");
+const scheduler_1 = require("../services/scheduler");
 exports.apiRouter = (0, express_1.Router)();
 const recommendationWeight = {
     BUY_NOW: 3,
@@ -195,11 +196,20 @@ exports.apiRouter.get('/export/full', (_request, response) => {
 exports.apiRouter.get('/paper', (_request, response) => {
     response.json(paperTradingService_1.paperTradingService.getState());
 });
+exports.apiRouter.post('/analyze/now', async (_request, response) => {
+    try {
+        await scheduler_1.schedulerService.runNow();
+        response.json({ ok: true });
+    }
+    catch (error) {
+        response.status(500).json({
+            ok: false,
+            message: error instanceof Error ? error.message : 'Ошибка ручного запуска анализа'
+        });
+    }
+});
 exports.apiRouter.post('/paper/reset', (_request, response) => {
-    response.json({
-        ok: true,
-        paper: paperTradingService_1.paperTradingService.reset()
-    });
+    response.json(paperTradingService_1.paperTradingService.reset());
 });
 exports.apiRouter.get('/backtest', (_request, response) => {
     response.json(backtestService_1.backtestService.getState());

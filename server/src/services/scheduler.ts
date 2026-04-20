@@ -46,6 +46,10 @@ export class SchedulerService {
     }
   }
 
+  public async runNow(): Promise<void> {
+    await this.runCycle();
+  }
+
   private async runCycle(): Promise<void> {
     if (this.running) {
       return;

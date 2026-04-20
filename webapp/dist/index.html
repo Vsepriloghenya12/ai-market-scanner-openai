@@ -66,10 +66,11 @@
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn secondary" id="exportFull">Выгрузить полную статистику</button>
-        <button class="btn secondary" id="resetPaper">Сбросить демо-счёт</button>
         <button class="btn" id="reloadBtn">Обновить сейчас</button>
+        <button class="btn secondary" id="resetPaper">Сбросить демо-счёт</button>
       </div>
     </div>
+    <div id="actionMessage" class="hint" style="display:none;margin-bottom:16px"></div>
 
     <section class="hero">
       <div class="card" id="bestIdeaCard"></div>
@@ -188,18 +189,68 @@ async function load(){
   document.getElementById('latestSignalsCard').innerHTML = `<h2>Последние сигналы рынка</h2>${latest.items.length ? '<div class="list">'+latest.items.slice(0,12).map(signalShort).join('')+'</div>' : '<div class="empty">Сигналов пока нет. Проверьте, что сканер запускается и нет ошибок Bybit.</div>'}`;
 }
 
-async function resetPaper(){
-  await j('/api/paper/reset',{method:'POST'});
-  await load();
+const actionMessage = document.getElementById('actionMessage');
+const reloadBtn = document.getElementById('reloadBtn');
+const resetBtn = document.getElementById('resetPaper');
+const exportBtn = document.getElementById('exportFull');
+
+function setBusy(flag){
+  reloadBtn.disabled = flag;
+  resetBtn.disabled = flag;
+  exportBtn.disabled = flag;
 }
 
-document.getElementById('reloadBtn').onclick = ()=> load().catch(showError);
+function setMessage(message, isError = false){
+  if(!message){
+    actionMessage.style.display = 'none';
+    actionMessage.textContent = '';
+    actionMessage.style.borderColor = 'rgba(56,189,248,.18)';
+    actionMessage.style.background = 'rgba(56,189,248,.08)';
+    return;
+  }
+  actionMessage.style.display = 'block';
+  actionMessage.textContent = message;
+  actionMessage.style.borderColor = isError ? 'rgba(239,68,68,.24)' : 'rgba(56,189,248,.18)';
+  actionMessage.style.background = isError ? 'rgba(239,68,68,.08)' : 'rgba(56,189,248,.08)';
+}
+
+async function runAnalyzeNow(){
+  setBusy(true);
+  setMessage('Запускаю новый анализ рынка...');
+  try {
+    await j('/api/analyze/now',{method:'POST'});
+    await load();
+    setMessage('Рынок обновлён.');
+  } catch(error){
+    setMessage(error.message || String(error), true);
+    throw error;
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function resetPaper(){
+  setBusy(true);
+  setMessage('Сбрасываю демо-счёт...');
+  try {
+    await j('/api/paper/reset',{method:'POST'});
+    await load();
+    setMessage('Демо-счёт сброшен.');
+  } catch(error){
+    setMessage(error.message || String(error), true);
+    throw error;
+  } finally {
+    setBusy(false);
+  }
+}
+
+document.getElementById('reloadBtn').onclick = ()=> runAnalyzeNow().catch(showError);
 document.getElementById('resetPaper').onclick = ()=> resetPaper().catch(showError);
 document.getElementById('exportFull').onclick = ()=> { window.location.href = '/api/export/full'; };
 function showError(error){
-  alert(error.message || String(error));
+  console.error(error);
 }
-load().catch(showError);
+load().catch((error)=> setMessage(error.message || String(error), true));
 setInterval(()=> load().catch(()=>{}), 15000);
 </script>
 </body>

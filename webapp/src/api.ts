@@ -107,6 +107,7 @@ export const api = {
   getOpportunities: () => request<OpportunitiesResponse>('/api/opportunities'),
   getPaper: () => request<PaperState>('/api/paper'),
   getSignalsLatest: () => request<{ items: SignalItem[] }>('/api/signals/latest'),
+  runAnalyzeNow: () => request<{ ok: boolean }>('/api/analyze/now', { method: 'POST' }),
   resetPaper: () => request<PaperState>('/api/paper/reset', { method: 'POST' })
 };
 
