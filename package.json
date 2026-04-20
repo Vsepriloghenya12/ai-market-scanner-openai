@@ -1,22 +1,19 @@
 {
-  "name": "ai-futures-market-scanner",
+  "name": "ai-futures-market-scanner-runtime",
   "version": "1.0.0",
   "private": true,
-  "description": "Русский сканер ликвидных крипто-фьючерсов: что купить сейчас, где вход и где продавать.",
-  "workspaces": [
-    "server",
-    "webapp"
-  ],
+  "description": "Русский сканер ликвидных крипто-фьючерсов",
   "engines": {
     "node": ">=20.19.0"
   },
   "scripts": {
-    "dev": "concurrently -n server,webapp -c cyan,magenta \"npm run dev --workspace server\" \"npm run dev --workspace webapp\"",
-    "build": "echo \"Используются уже собранные dist-файлы\"",
-    "start": "node server/dist/index.js",
-    "lint": "npm run lint --workspace server && npm run lint --workspace webapp"
+    "build": "echo \"Пропускаем сборку: используются уже собранные dist-файлы\"",
+    "start": "node server/dist/index.js"
   },
-  "devDependencies": {
-    "concurrently": "^9.1.2"
+  "dependencies": {
+    "axios": "^1.11.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "openai": "^6.34.0"
   }
 }
