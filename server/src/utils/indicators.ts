@@ -329,13 +329,16 @@ export const evaluateSignal = (
 
   const trendStrong = indicators.adx >= 18;
   const volumeConfirmed = indicators.volumeRatio >= 1.08;
+  const entryVolumeConfirmed = indicators.volumeRatio >= 1.2;
   const highVolatility = indicators.volatilityPct > 4.2;
   const longMomentumOk = indicators.momentumPct >= 0.45;
   const breakout = indicators.swingHigh20 > 0 && price >= indicators.swingHigh20 * 0.999;
+  const breakoutConfirmed = indicators.swingHigh20 > 0 && price >= indicators.swingHigh20 * 1.001;
   const pullback =
     bullishTrend &&
     price >= indicators.emaFast &&
     price <= indicators.emaFast + Math.max(indicators.atr * 0.35, price * 0.0035);
+  const pullbackConfirmed = pullback && indicators.adx >= 22 && indicators.rsi >= 55;
   const tooExtended =
     (indicators.atr > 0 && (price - indicators.emaFast) / indicators.atr > 2) || indicators.rsi >= 74;
   const liquidityOk = market.turnover24hUsd >= config.minTurnover24hUsd;
@@ -365,13 +368,16 @@ export const evaluateSignal = (
     score += 0.7;
     reasons.push('Импульс положительный: движение вверх не затухло.');
   } else {
-    score -= 0.3;
-    reasons.push('Импульс слабый: рынок пока не показывает уверенного продолжения роста.');
+    score -= 0.9;
+    reasons.push('Импульс слабый: рынок пока не показывает уверенного продолжения роста, поэтому вход только после подтверждения.');
   }
 
-  if (volumeConfirmed) {
+  if (entryVolumeConfirmed) {
     score += 0.6;
     reasons.push('Объём выше среднего: рост поддержан участниками рынка.');
+  } else if (volumeConfirmed) {
+    score += 0.25;
+    reasons.push('Объём немного выше среднего, но для немедленного входа подтверждение ещё слабое.');
   } else {
     reasons.push('Объём без всплеска: пробой может оказаться ложным.');
   }
@@ -418,6 +424,8 @@ export const evaluateSignal = (
   }
 
   const confidence = clamp(0.34 + score / 8.6, 0.15, 0.95);
+  const entrySetupConfirmed =
+    (setup === 'BREAKOUT' && breakoutConfirmed) || (setup === 'PULLBACK' && pullbackConfirmed);
 
   let signal: SignalType = 'HOLD';
   let recommendation: RecommendationType = 'WAIT';
@@ -427,7 +435,9 @@ export const evaluateSignal = (
   const actionable =
     bullishTrend &&
     trendStrong &&
-    volumeConfirmed &&
+    longMomentumOk &&
+    entryVolumeConfirmed &&
+    entrySetupConfirmed &&
     !highVolatility &&
     !tooExtended &&
     confidence >= config.minConfidenceActionable &&
