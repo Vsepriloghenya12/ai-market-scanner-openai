@@ -108,7 +108,6 @@ export class SchedulerService {
 
       await runWithConcurrency(jobs, 2, async ({ market, timeframe }) => {
         try {
-          const candles = await marketDataService.fetchCandles(market.symbol, timeframe);
           const snapshot: MarketSnapshot = {
             symbol: market.symbol,
             rank24h: market.rank24h,
@@ -119,12 +118,7 @@ export class SchedulerService {
             fundingRate: market.fundingRate
           };
 
-          await analysisService.analyzeSymbol({
-            symbol: market.symbol,
-            timeframe,
-            candles,
-            market: snapshot
-          });
+          await analysisService.analyze(snapshot, timeframe);
         } catch (error) {
           const message = `${market.symbol}/${timeframe}: ${error instanceof Error ? error.message : 'Unknown error'}`;
           console.error(`Ошибка анализа ${message}`);
