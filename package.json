@@ -2,6 +2,7 @@
   "name": "ai-futures-market-scanner-runtime",
   "version": "1.0.0",
   "private": true,
+  "description": "Русский сканер ликвидных крипто-фьючерсов с paper trading и бэктестом.",
   "engines": {
     "node": ">=20.19.0"
   },

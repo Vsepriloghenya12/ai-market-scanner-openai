@@ -88,7 +88,6 @@ class SchedulerService {
             const jobs = universe.items.flatMap((market) => config_1.config.timeframes.map((timeframe) => ({ market, timeframe })));
             await runWithConcurrency(jobs, 2, async ({ market, timeframe }) => {
                 try {
-                    const candles = await marketData_1.marketDataService.fetchCandles(market.symbol, timeframe);
                     const snapshot = {
                         symbol: market.symbol,
                         rank24h: market.rank24h,
@@ -98,12 +97,7 @@ class SchedulerService {
                         lastPrice: market.lastPrice,
                         fundingRate: market.fundingRate
                     };
-                    await analysisService_1.analysisService.analyzeSymbol({
-                        symbol: market.symbol,
-                        timeframe,
-                        candles,
-                        market: snapshot
-                    });
+                    await analysisService_1.analysisService.analyze(snapshot, timeframe);
                 }
                 catch (error) {
                     const message = `${market.symbol}/${timeframe}: ${error instanceof Error ? error.message : 'Unknown error'}`;
