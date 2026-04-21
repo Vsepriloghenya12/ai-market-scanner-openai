@@ -99,6 +99,7 @@ export class SchedulerService {
     storageService.updateAnalyzerState({ isRunning: true, lastError: null });
 
     const errors: string[] = [];
+    const analyzedSymbols = new Set<string>();
 
     try {
       const universe = await marketDataService.fetchUniverse();
@@ -119,6 +120,7 @@ export class SchedulerService {
           };
 
           await analysisService.analyze(snapshot, timeframe);
+          analyzedSymbols.add(market.symbol);
         } catch (error) {
           const message = `${market.symbol}/${timeframe}: ${error instanceof Error ? error.message : 'Unknown error'}`;
           console.error(`Ошибка анализа ${message}`);
@@ -126,8 +128,20 @@ export class SchedulerService {
         }
       });
 
+      const completedAt = new Date().toISOString();
+
+      storageService.updateUniverseState({
+        fetchedAt: completedAt,
+        totalSymbols: universe.totalSymbols,
+        eligibleSymbols: universe.eligibleSymbols,
+        analyzedSymbols: analyzedSymbols.size,
+        topSymbols: universe.items.map((item) => item.symbol),
+        minTurnoverUsd: config.minTurnover24hUsd,
+        maxSymbolsToAnalyze: config.maxSymbolsToAnalyze
+      });
+
       storageService.updateAnalyzerState({
-        lastRunAt: new Date().toISOString(),
+        lastRunAt: completedAt,
         runCount: storageService.getAnalyzerState().runCount + 1,
         lastError: errors.length > 0 ? errors.slice(0, 5).join(' | ') : null
       });

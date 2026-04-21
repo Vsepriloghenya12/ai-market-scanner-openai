@@ -98,6 +98,63 @@ export interface PaperState {
   closedTrades: PaperTrade[];
 }
 
+export interface BacktestTrade {
+  id: string;
+  symbol: string;
+  timeframe: string;
+  openedAt: string;
+  closedAt: string;
+  entryPrice: number;
+  exitPrice: number;
+  quantity: number;
+  pnlUsd: number;
+  pnlPct: number;
+  feesUsd: number;
+  closeReason: string;
+  tp1Hit: boolean;
+  durationCandles: number;
+}
+
+export interface BacktestState {
+  summary: {
+    runId: string | null;
+    status: 'IDLE' | 'RUNNING' | 'DONE' | 'ERROR';
+    startedAt: string | null;
+    completedAt: string | null;
+    symbolsTested: number;
+    timeframes: string[];
+    tradesCount: number;
+    winRate: number;
+    totalPnlUsd: number;
+    totalFeesUsd: number;
+    endingBalanceUsd: number;
+    bestTradeUsd: number;
+    worstTradeUsd: number;
+    maxDrawdownPct: number;
+    profitFactor: number;
+    notes: string[];
+  };
+  settings: {
+    candles: number;
+    warmup: number;
+    maxSymbols: number;
+    maxHoldCandles: number;
+    feePct: number;
+    startingBalanceUsd: number;
+    timeframes: string[];
+  };
+  trades: BacktestTrade[];
+  lastError: string | null;
+}
+
+export interface BacktestRunRequest {
+  maxSymbols?: number;
+  candles?: number;
+  warmup?: number;
+  maxHoldCandles?: number;
+  timeframes?: string[];
+}
+
 export interface HealthResponse {
   analyzer: AnalyzerState;
   universe: UniverseState;
@@ -120,6 +177,12 @@ export const api = {
   runAnalyzeNow: () => request<{ ok: boolean }>('/api/analyze/now', { method: 'POST' }),
   resetPaper: () => request<PaperState>('/api/paper/reset', { method: 'POST' }),
   getScanner: () => request<ScannerState>('/api/scanner'),
+  getBacktest: () => request<BacktestState>('/api/backtest'),
+  runBacktest: (body: BacktestRunRequest = {}) => request<{ ok: boolean; result: BacktestState }>('/api/backtest/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  }),
   setScannerEnabled: (enabled: boolean) => request<{ ok: boolean } & ScannerState>('/api/scanner/toggle', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

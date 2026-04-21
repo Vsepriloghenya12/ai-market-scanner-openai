@@ -17,6 +17,7 @@ class AnalysisService {
             throw new Error(`Недостаточно свечей для ${market.symbol}/${timeframe}`);
         }
         const price = candles.at(-1)?.close ?? market.lastPrice;
+        const latestCandle = candles.at(-1);
         const indicators = (0, indicators_1.buildIndicatorSnapshot)(candles);
         const decision = (0, indicators_1.evaluateSignal)(price, indicators, market);
         const record = {
@@ -28,6 +29,7 @@ class AnalysisService {
             confidence: Number(decision.confidence.toFixed(4)),
             score: Number(decision.score.toFixed(4)),
             price,
+            candle: latestCandle,
             createdAt: new Date().toISOString(),
             regime: decision.regime,
             setup: decision.setup,

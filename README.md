@@ -46,9 +46,9 @@ curl -X POST https://ваш-домен.railway.app/api/backtest/run   -H "Conten
 
 ## Railway
 
-Для prebuilt-варианта проект рассчитан на запуск через:
+Проект рассчитан на обычную сборку исходников перед запуском:
 
-- build: `echo "Пропускаем сборку: используются уже собранные dist-файлы"`
+- build: `npm run build`
 - start: `node server/dist/index.js`
 
 Если используете `railway.json`, оставьте его в репозитории.

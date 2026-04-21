@@ -3,11 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "description": "Русский сканер ликвидных крипто-фьючерсов с paper trading и бэктестом.",
+  "workspaces": [
+    "server",
+    "webapp"
+  ],
   "engines": {
     "node": ">=20.19.0"
   },
   "scripts": {
-    "build": "echo \"Пропускаем сборку: используются уже собранные dist-файлы\"",
+    "build": "npm run build --workspace server && npm run build --workspace webapp",
+    "lint": "npm run lint --workspace server && npm run lint --workspace webapp",
     "start": "node server/dist/index.js"
   },
   "dependencies": {

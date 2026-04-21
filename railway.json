@@ -10,7 +10,7 @@
       "/webapp/**",
       "/data/**"
     ],
-    "buildCommand": "echo \"Пропускаем сборку: используются уже собранные dist-файлы\""
+    "buildCommand": "npm run build"
   },
   "deploy": {
     "startCommand": "node server/dist/index.js",

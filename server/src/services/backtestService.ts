@@ -11,6 +11,7 @@ interface SimPosition {
   timeframe: string;
   entryPrice: number;
   quantity: number;
+  remainingQuantity: number;
   stopLoss: number;
   takeProfit1: number;
   takeProfit2: number;
@@ -98,8 +99,9 @@ const closeTrade = (
   exitPrice: number,
   closeIndex: number
 ): void => {
-  const finalFee = position.quantity * exitPrice * feeRate();
-  const finalPnl = position.realizedPnlUsd + (exitPrice - position.entryPrice) * (position.tp1Hit ? position.quantity / 2 : position.quantity) - finalFee;
+  const finalFee = position.remainingQuantity * exitPrice * feeRate();
+  const finalPnl =
+    position.realizedPnlUsd + (exitPrice - position.entryPrice) * position.remainingQuantity - finalFee;
   const feesUsd = position.realizedFeesUsd + finalFee;
 
   state.trades.unshift({
@@ -137,14 +139,14 @@ const maybeOpenPosition = (
     return null;
   }
 
+  const entryPrice = Math.min(plan.entryMax, Math.max(plan.entryMin, nextCandle.open));
   const riskAmount = startingBalanceUsd * (config.riskPerTradePct / 100);
-  const riskDistance = plan.entry - plan.stopLoss;
+  const riskDistance = entryPrice - plan.stopLoss;
   const quantity = riskDistance > 0 ? riskAmount / riskDistance : 0;
-  if (quantity <= 0) {
+  if (quantity <= 0 || entryPrice <= 0) {
     return null;
   }
 
-  const entryPrice = Math.min(plan.entryMax, Math.max(plan.entryMin, nextCandle.open));
   const entryFee = entryPrice * quantity * feeRate();
 
   return {
@@ -152,6 +154,7 @@ const maybeOpenPosition = (
     timeframe,
     entryPrice,
     quantity,
+    remainingQuantity: quantity,
     stopLoss: plan.stopLoss,
     takeProfit1: plan.takeProfit1,
     takeProfit2: plan.takeProfit2,
@@ -161,6 +164,51 @@ const maybeOpenPosition = (
     openedIndex: index + 1,
     openedAt: new Date(nextCandle.timestamp).toISOString()
   };
+};
+
+const processPositionOnCandle = (
+  state: BacktestState,
+  position: SimPosition,
+  candle: Candle,
+  closeIndex: number,
+  options: {
+    recommendation?: SignalRecord['recommendation'];
+    maxHoldCandles?: number;
+  } = {}
+): SimPosition | null => {
+  if (candle.low <= position.stopLoss) {
+    closeTrade(state, position, candle, 'STOP', position.stopLoss, closeIndex);
+    return null;
+  }
+
+  if (!position.tp1Hit && candle.high >= position.takeProfit1) {
+    const half = position.remainingQuantity / 2;
+    const fee = position.takeProfit1 * half * feeRate();
+    position.realizedPnlUsd += (position.takeProfit1 - position.entryPrice) * half - fee;
+    position.realizedFeesUsd += fee;
+    position.remainingQuantity = Math.max(0, position.remainingQuantity - half);
+    position.tp1Hit = true;
+  }
+
+  if (candle.high >= position.takeProfit2) {
+    closeTrade(state, position, candle, 'TAKE_PROFIT_2', position.takeProfit2, closeIndex);
+    return null;
+  }
+
+  if (options.recommendation === 'EXIT') {
+    closeTrade(state, position, candle, 'EXIT_SIGNAL', candle.open, closeIndex);
+    return null;
+  }
+
+  if (
+    typeof options.maxHoldCandles === 'number' &&
+    closeIndex - position.openedIndex >= options.maxHoldCandles
+  ) {
+    closeTrade(state, position, candle, 'TIMEOUT', candle.close, closeIndex);
+    return null;
+  }
+
+  return position;
 };
 
 export class BacktestService {
@@ -229,6 +277,7 @@ export class BacktestService {
                   confidence: decision.confidence,
                   score: decision.score,
                   price: currentCandle.close,
+                  candle: currentCandle,
                   createdAt: new Date(currentCandle.timestamp).toISOString(),
                   regime: decision.regime,
                   setup: decision.setup,
@@ -244,34 +293,17 @@ export class BacktestService {
               : null;
 
             if (position) {
-              const bothHit = nextCandle.low <= position.stopLoss && nextCandle.high >= position.takeProfit2;
-              if (bothHit || nextCandle.low <= position.stopLoss) {
-                closeTrade(nextState, position, nextCandle, 'STOP', position.stopLoss, index + 1);
-                position = null;
-              } else {
-                if (!position.tp1Hit && nextCandle.high >= position.takeProfit1) {
-                  const half = position.quantity / 2;
-                  const fee = position.takeProfit1 * half * feeRate();
-                  position.realizedPnlUsd += (position.takeProfit1 - position.entryPrice) * half - fee;
-                  position.realizedFeesUsd += fee;
-                  position.tp1Hit = true;
-                }
-
-                if (nextCandle.high >= position.takeProfit2) {
-                  closeTrade(nextState, position, nextCandle, 'TAKE_PROFIT_2', position.takeProfit2, index + 1);
-                  position = null;
-                } else if (decision.recommendation === 'EXIT') {
-                  closeTrade(nextState, position, nextCandle, 'EXIT_SIGNAL', nextCandle.open, index + 1);
-                  position = null;
-                } else if (index + 1 - position.openedIndex >= settings.maxHoldCandles) {
-                  closeTrade(nextState, position, nextCandle, 'TIMEOUT', nextCandle.close, index + 1);
-                  position = null;
-                }
-              }
+              position = processPositionOnCandle(nextState, position, nextCandle, index + 1, {
+                recommendation: decision.recommendation,
+                maxHoldCandles: settings.maxHoldCandles
+              });
             }
 
             if (!position) {
               position = maybeOpenPosition(signalRecord, nextCandle, market.symbol, timeframe, index, settings.startingBalanceUsd);
+              if (position) {
+                position = processPositionOnCandle(nextState, position, nextCandle, index + 1);
+              }
             }
           }
 

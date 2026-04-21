@@ -10,8 +10,12 @@ const round = (value: number, digits = 6): number => Number(value.toFixed(digits
 
 const buildSummary = (state: PaperState): PaperState['summary'] => {
   const closedTrades = state.closedTrades;
-  const totalPnlUsd = closedTrades.reduce((sum, item) => sum + item.pnlUsd, 0);
-  const totalFeesUsd = closedTrades.reduce((sum, item) => sum + item.feesUsd, 0) + state.openPositions.reduce((sum, item) => sum + item.realizedFeesUsd, 0);
+  const closedPnlUsd = closedTrades.reduce((sum, item) => sum + item.pnlUsd, 0);
+  const openRealizedPnlUsd = state.openPositions.reduce((sum, item) => sum + item.realizedPnlUsd, 0);
+  const totalPnlUsd = closedPnlUsd + openRealizedPnlUsd;
+  const totalFeesUsd =
+    closedTrades.reduce((sum, item) => sum + item.feesUsd, 0) +
+    state.openPositions.reduce((sum, item) => sum + item.realizedFeesUsd, 0);
   const wins = closedTrades.filter((item) => item.pnlUsd > 0).length;
 
   return {
@@ -99,15 +103,18 @@ export class PaperTradingService {
     const now = signal.createdAt;
 
     if (existing) {
-      if (signal.price <= existing.stopLoss) {
+      const candleLow = signal.candle?.low ?? signal.price;
+      const candleHigh = signal.candle?.high ?? signal.price;
+
+      if (candleLow <= existing.stopLoss) {
         closePosition(state, existing, existing.stopLoss, 'STOP', now);
       } else {
-        if (!existing.tp1Hit && signal.price >= existing.takeProfit1) {
-          const partialQuantity = existing.quantity / 2;
+        if (!existing.tp1Hit && candleHigh >= existing.takeProfit1) {
+          const partialQuantity = existing.remainingQuantity / 2;
           const exitNotional = partialQuantity * existing.takeProfit1;
           const exitFee = exitNotional * feeRate;
           const partialPnl = (existing.takeProfit1 - existing.entryPrice) * partialQuantity - exitFee;
-          existing.remainingQuantity = round(existing.quantity - partialQuantity, 6);
+          existing.remainingQuantity = round(existing.remainingQuantity - partialQuantity, 6);
           existing.realizedPnlUsd = round(existing.realizedPnlUsd + partialPnl, 2);
           existing.realizedFeesUsd = round(existing.realizedFeesUsd + exitFee, 2);
           existing.tp1Hit = true;
@@ -115,7 +122,7 @@ export class PaperTradingService {
           state.summary.lastEventAt = now;
         }
 
-        if (signal.price >= existing.takeProfit2) {
+        if (candleHigh >= existing.takeProfit2) {
           closePosition(state, existing, existing.takeProfit2, 'TAKE_PROFIT_2', now);
         } else if (signal.recommendation === 'EXIT') {
           closePosition(state, existing, signal.price, 'EXIT_SIGNAL', now);

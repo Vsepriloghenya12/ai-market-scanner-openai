@@ -1,14 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api, downloadFullExport, HealthResponse, OpportunitiesResponse, PaperState, SignalItem } from './api';
+import {
+  api,
+  BacktestState,
+  downloadFullExport,
+  HealthResponse,
+  OpportunitiesResponse,
+  PaperState,
+  SignalItem
+} from './api';
 
 type DashboardState = {
   health: HealthResponse;
   opportunities: OpportunitiesResponse;
   paper: PaperState;
+  backtest: BacktestState;
   latestSignals: SignalItem[];
 };
 
-type TabKey = 'overview' | 'signals' | 'paper' | 'activity';
+type TabKey = 'overview' | 'signals' | 'paper' | 'backtest' | 'activity';
 
 type ActivityItem = {
   title: string;
@@ -38,6 +47,13 @@ const recommendationText: Record<SignalItem['recommendation'], string> = {
   BUY_NOW: 'Покупать сейчас',
   WAIT: 'Ждать',
   EXIT: 'Не покупать / выходить'
+};
+
+const backtestStatusText: Record<BacktestState['summary']['status'], string> = {
+  IDLE: 'Ещё не запускался',
+  RUNNING: 'Выполняется',
+  DONE: 'Готов',
+  ERROR: 'Ошибка'
 };
 
 const secondsToNextBoundary = (minutes: number, now = Date.now()): number => {
@@ -92,7 +108,8 @@ export default function App() {
         api.getPaper(),
         api.getSignalsLatest()
       ]);
-      setData({ health, opportunities, paper, latestSignals: latest.items });
+      const backtest = await api.getBacktest();
+      setData({ health, opportunities, paper, backtest, latestSignals: latest.items });
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Ошибка загрузки');
@@ -155,6 +172,22 @@ export default function App() {
     }
   };
 
+  const handleRunBacktest = async () => {
+    try {
+      setBusy(true);
+      setMessage('Запускаю бэктест. Это может занять немного времени...');
+      await api.runBacktest();
+      await load();
+      setMessage('Бэктест завершён.');
+      setActiveTab('backtest');
+    } catch (loadError) {
+      setMessage(loadError instanceof Error ? loadError.message : 'Не удалось запустить бэктест');
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const countdown15 = formatCountdown(secondsToNextBoundary(15, tick));
   const countdown60 = formatCountdown(secondsToNextBoundary(60, tick));
 
@@ -204,7 +237,7 @@ export default function App() {
     return <div className="page"><div className="hero-card">Загрузка…</div></div>;
   }
 
-  const { health, opportunities, paper, latestSignals } = data;
+  const { health, opportunities, paper, backtest, latestSignals } = data;
 
   return (
     <main className="page">
@@ -220,6 +253,7 @@ export default function App() {
             <button onClick={downloadFullExport} disabled={busy}>Выгрузить полную статистику</button>
             <button onClick={handleRefreshNow} disabled={busy || !health.analyzer.scanEnabled}>Обновить сейчас</button>
             <button onClick={handleToggleScanner} disabled={busy}>{health.analyzer.scanEnabled ? 'Выключить сканер' : 'Включить сканер'}</button>
+            <button onClick={handleRunBacktest} disabled={busy}>Запустить бэктест</button>
             <button onClick={handleResetPaper} disabled={busy}>Сбросить демо-счёт</button>
           </div>
         </div>
@@ -239,6 +273,7 @@ export default function App() {
         <button className={activeTab === 'overview' ? 'active' : ''} onClick={() => setActiveTab('overview')}>Главное</button>
         <button className={activeTab === 'signals' ? 'active' : ''} onClick={() => setActiveTab('signals')}>Сигналы</button>
         <button className={activeTab === 'paper' ? 'active' : ''} onClick={() => setActiveTab('paper')}>Демо-счёт</button>
+        <button className={activeTab === 'backtest' ? 'active' : ''} onClick={() => setActiveTab('backtest')}>Бэктест</button>
         <button className={activeTab === 'activity' ? 'active' : ''} onClick={() => setActiveTab('activity')}>Активность</button>
       </section>
 
@@ -337,6 +372,71 @@ export default function App() {
                 </div>
               ))}
               {paper.closedTrades.length === 0 ? <EmptyState text="Закрытых демо-сделок пока нет." /> : null}
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      {activeTab === 'backtest' ? (
+        <>
+          <section className="hero-card">
+            <div className="tab-hero-row">
+              <div>
+                <h2>Бэктест стратегии</h2>
+                <p>
+                  Проверка прогоняет те же правила по историческим свечам и показывает, как стратегия вела бы себя без реальных денег.
+                </p>
+              </div>
+              <div className="tab-actions">
+                <button onClick={handleRunBacktest} disabled={busy}>
+                  {backtest.summary.status === 'RUNNING' ? 'Бэктест идёт...' : 'Запустить заново'}
+                </button>
+              </div>
+            </div>
+            {backtest.lastError ? <p className="error-text">Ошибка: {backtest.lastError}</p> : null}
+          </section>
+
+          <section className="stats-grid">
+            <div className="stat-card"><span>Статус</span><strong>{backtestStatusText[backtest.summary.status]}</strong></div>
+            <div className="stat-card"><span>Сделок</span><strong>{backtest.summary.tradesCount}</strong></div>
+            <div className="stat-card"><span>Win rate</span><strong>{formatPercent(backtest.summary.winRate)}</strong></div>
+            <div className="stat-card"><span>Итоговый баланс</span><strong>${formatMoney(backtest.summary.endingBalanceUsd)}</strong></div>
+            <div className="stat-card"><span>Max drawdown</span><strong>{formatMoney(backtest.summary.maxDrawdownPct)}%</strong></div>
+            <div className="stat-card"><span>Profit factor</span><strong>{backtest.summary.profitFactor === 999 ? '999+' : formatMoney(backtest.summary.profitFactor)}</strong></div>
+          </section>
+
+          <section className="columns">
+            <div>
+              <h2>Настройки прогона</h2>
+              <div className="recommendation-card">
+                <p>
+                  Монет: {backtest.settings.maxSymbols} · Свечей: {backtest.settings.candles} · Warmup:{' '}
+                  {backtest.settings.warmup} · Max hold: {backtest.settings.maxHoldCandles} свечей
+                </p>
+                <p>
+                  Таймфреймы: {backtest.settings.timeframes.map(timeframeLabel).join(', ')} · Комиссия:{' '}
+                  {formatMoney(backtest.settings.feePct)}%
+                </p>
+                <p>
+                  Последний запуск: {formatDateTime(backtest.summary.completedAt ?? backtest.summary.startedAt)}
+                </p>
+              </div>
+
+              <h2>Заметки</h2>
+              <div className="recommendation-card">
+                {backtest.summary.notes.map((note, index) => <p key={`${note}-${index}`}>{note}</p>)}
+              </div>
+            </div>
+            <div>
+              <h2>Последние сделки бэктеста</h2>
+              {backtest.trades.slice(0, 12).map((item) => (
+                <div key={item.id} className="recommendation-card">
+                  <strong>{item.symbol}</strong> · {timeframeLabel(item.timeframe)} · {item.durationCandles} свечей<br />
+                  PnL: ${formatMoney(item.pnlUsd)} · Комиссии: ${formatMoney(item.feesUsd)} · Причина: {item.closeReason}<br />
+                  Вход {formatPrice(item.entryPrice)} · Выход {formatPrice(item.exitPrice)} · {formatDateTime(item.closedAt)}
+                </div>
+              ))}
+              {backtest.trades.length === 0 ? <EmptyState text="Сделок в последнем бэктесте пока нет." /> : null}
             </div>
           </section>
         </>

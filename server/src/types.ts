@@ -89,6 +89,7 @@ export interface SignalRecord {
   confidence: number;
   score: number;
   price: number;
+  candle?: Candle;
   createdAt: string;
   regime: MarketRegime;
   setup: SetupType;

@@ -574,6 +574,10 @@ h3 {
   font-size: 13px;
 }
 
+.error-text {
+  color: #fecaca;
+}
+
 @media (max-width: 760px) {
   .tab-strip {
     overflow-x: auto;

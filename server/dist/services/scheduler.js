@@ -83,6 +83,7 @@ class SchedulerService {
         this.running = true;
         storage_1.storageService.updateAnalyzerState({ isRunning: true, lastError: null });
         const errors = [];
+        const analyzedSymbols = new Set();
         try {
             const universe = await marketData_1.marketDataService.fetchUniverse();
             const jobs = universe.items.flatMap((market) => config_1.config.timeframes.map((timeframe) => ({ market, timeframe })));
@@ -98,6 +99,7 @@ class SchedulerService {
                         fundingRate: market.fundingRate
                     };
                     await analysisService_1.analysisService.analyze(snapshot, timeframe);
+                    analyzedSymbols.add(market.symbol);
                 }
                 catch (error) {
                     const message = `${market.symbol}/${timeframe}: ${error instanceof Error ? error.message : 'Unknown error'}`;
@@ -105,8 +107,18 @@ class SchedulerService {
                     errors.push(message);
                 }
             });
+            const completedAt = new Date().toISOString();
+            storage_1.storageService.updateUniverseState({
+                fetchedAt: completedAt,
+                totalSymbols: universe.totalSymbols,
+                eligibleSymbols: universe.eligibleSymbols,
+                analyzedSymbols: analyzedSymbols.size,
+                topSymbols: universe.items.map((item) => item.symbol),
+                minTurnoverUsd: config_1.config.minTurnover24hUsd,
+                maxSymbolsToAnalyze: config_1.config.maxSymbolsToAnalyze
+            });
             storage_1.storageService.updateAnalyzerState({
-                lastRunAt: new Date().toISOString(),
+                lastRunAt: completedAt,
                 runCount: storage_1.storageService.getAnalyzerState().runCount + 1,
                 lastError: errors.length > 0 ? errors.slice(0, 5).join(' | ') : null
             });
