@@ -49,6 +49,12 @@ const recommendationText: Record<SignalItem['recommendation'], string> = {
   EXIT: 'Не покупать / выходить'
 };
 
+const recommendationClass: Record<SignalItem['recommendation'], string> = {
+  BUY_NOW: 'buy',
+  WAIT: 'wait',
+  EXIT: 'exit'
+};
+
 const backtestStatusText: Record<BacktestState['summary']['status'], string> = {
   IDLE: 'Ещё не запускался',
   RUNNING: 'Выполняется',
@@ -75,7 +81,9 @@ function SignalCard({ item }: { item: SignalItem }) {
           <strong>{item.symbol}</strong>
           <span className="timeframe-pill">{timeframeLabel(item.timeframe)}</span>
         </div>
-        <span className="status-badge">{recommendationText[item.recommendation]}</span>
+        <span className={`status-badge ${recommendationClass[item.recommendation]}`}>
+          {recommendationText[item.recommendation]}
+        </span>
       </div>
       <p>{item.headline}</p>
       {item.tradePlan ? (

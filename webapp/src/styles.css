@@ -588,3 +588,190 @@ h3 {
     white-space: nowrap;
   }
 }
+
+/* Compatibility layer: keep the prebuilt dashboard visual while using the React app. */
+:root {
+  color-scheme: dark;
+  --bg: #07111f;
+  --card: #0f172a;
+  --line: #1e293b;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --green: #22c55e;
+  --yellow: #f59e0b;
+  --red: #ef4444;
+  --blue: #38bdf8;
+  font-family: Inter, Arial, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+body {
+  background: linear-gradient(180deg, #020617, #07111f 40%, #0b1220);
+}
+
+.page {
+  width: min(1280px, 100%);
+  display: block;
+  padding: 24px;
+}
+
+.hero-card,
+.recommendation-card,
+.stat-card {
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+  padding: 18px;
+}
+
+.hero-card,
+.stats-grid,
+.columns,
+.tab-strip {
+  margin-bottom: 16px;
+}
+
+.page > .hero-card:first-child {
+  margin-bottom: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.recommendation-card {
+  margin-top: 14px;
+  gap: 10px;
+}
+
+.stat-card span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.stat-card strong {
+  font-size: 24px;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0 0 10px;
+}
+
+h1 {
+  font-size: 32px;
+  line-height: 1.12;
+}
+
+h2 {
+  font-size: 24px;
+}
+
+p {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.tab-actions button,
+.tab-strip button {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tab-actions button {
+  border-radius: 12px;
+  background: #334155;
+}
+
+.tab-actions button:nth-child(2) {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.tab-strip {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tab-strip button {
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.92);
+}
+
+.tab-strip button.active {
+  background: rgba(56, 189, 248, 0.16);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.timeframe-pill {
+  background: #162236;
+  color: #cbd5e1;
+  min-height: auto;
+  margin-left: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.status-badge {
+  min-height: auto;
+  gap: 8px;
+  padding: 8px 12px;
+  color: inherit;
+  font-size: 13px;
+}
+
+.status-badge.buy {
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+}
+
+.status-badge.wait {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fcd34d;
+}
+
+.status-badge.exit {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+}
+
+.card-topline {
+  align-items: flex-start;
+}
+
+.activity-item {
+  border: 1px solid var(--line);
+  background: rgba(2, 6, 23, 0.28);
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding: 24px;
+  }
+
+  .tab-strip {
+    flex-wrap: nowrap;
+  }
+}
