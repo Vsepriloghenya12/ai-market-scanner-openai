@@ -251,7 +251,10 @@ const evaluateSignal = (price, indicators, market) => {
         price >= indicators.emaFast &&
         price <= indicators.emaFast + Math.max(indicators.atr * 0.35, price * 0.0035);
     const pullbackConfirmed = pullback && indicators.adx >= 22 && indicators.rsi >= 55;
-    const tooExtended = (indicators.atr > 0 && (price - indicators.emaFast) / indicators.atr > 2) || indicators.rsi >= 74;
+    const euphoricBreakout = breakout && (indicators.momentumPct >= 6 || indicators.trendGapPct >= 8);
+    const tooExtended = (indicators.atr > 0 && (price - indicators.emaFast) / indicators.atr > 2) ||
+        indicators.rsi >= 74 ||
+        euphoricBreakout;
     const liquidityOk = market.turnover24hUsd >= config_1.config.minTurnover24hUsd;
     const spreadOk = market.spreadPct <= config_1.config.maxSpreadPct;
     if (bullishTrend) {
@@ -327,6 +330,10 @@ const evaluateSignal = (price, indicators, market) => {
     if (highVolatility) {
         score -= 0.8;
         reasons.push('Волатильность слишком высокая: риск выбивания по стопу повышен.');
+    }
+    if (euphoricBreakout) {
+        score -= 1.2;
+        reasons.push('Пробой уже слишком горячий: движение вертикальное, и вход сейчас похож на погоню за свечой.');
     }
     if (tooExtended) {
         score -= 1.0;
