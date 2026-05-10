@@ -24,13 +24,13 @@ export const strategyRules: StrategyRule[] = [
     id: 'momentum-volume',
     title: 'Без объёма и импульса вход не подтверждён',
     description:
-      'Даже хороший тренд без объёма и импульса остаётся только идеей для наблюдения. Статус “Покупать сейчас” появляется только после подтверждения рынком.'
+      'После анализа paper-сделок фильтр входа стал жёстче: для покупки нужен не просто тренд, а подтверждённый импульс, объём, рабочая RSI-зона и отсутствие перегретого фандинга.'
   },
   {
     id: 'risk-first',
     title: 'Сначала риск, потом прибыль',
     description:
-      'Стоп и цели считаются от ATR и рыночной структуры. Размер позиции считается от риска на сделку, а не от желания зайти “побольше”.'
+      'Стоп и цели считаются от ATR и рыночной структуры. После первой цели стоп переносится ближе к безубытку, а число одновременных paper-позиций ограничивается.'
   },
   {
     id: 'simple-output',
@@ -42,6 +42,12 @@ export const strategyRules: StrategyRule[] = [
 
 export const strategyMeta = {
   adxThreshold: 18,
+  minAdxForEntry: { fastTimeframe: 24, slowTimeframe: 22 },
+  minMomentumForEntryPct: { fastTimeframe: 1.15, slowTimeframe: 0.9 },
+  minVolumeRatioForEntry: { fastTimeframe: 1.35, slowTimeframe: 1.25 },
+  rsiEntryZone: { min: 55, fastTimeframeMin: 56, max: 66 },
+  trendGapEntryZonePct: { min: 0.8, max: 7.5 },
+  maxFundingRateForEntry: 0.00015,
   highVolatilityThresholdPct: 4.2,
   rewardTargetsR: [1.5, 2.5],
   accountSizeUsd: config.accountSizeUsd,

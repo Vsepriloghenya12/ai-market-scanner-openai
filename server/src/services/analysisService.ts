@@ -18,7 +18,7 @@ export class AnalysisService {
     const price = candles.at(-1)?.close ?? market.lastPrice;
     const latestCandle = candles.at(-1);
     const indicators = buildIndicatorSnapshot(candles);
-    const decision = evaluateSignal(price, indicators, market);
+    const decision = evaluateSignal(price, indicators, market, timeframe);
 
     const record: SignalRecord = {
       id: crypto.randomUUID(),

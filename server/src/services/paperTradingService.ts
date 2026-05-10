@@ -7,6 +7,15 @@ import { storageService } from './storage';
 const feeRate = config.simulationFeePct / 100;
 
 const round = (value: number, digits = 6): number => Number(value.toFixed(digits));
+const maxOpenPositions = 6;
+
+const getMinWeakExitAgeMs = (timeframe: string): number => {
+  if (timeframe === '15') {
+    return 45 * 60 * 1000;
+  }
+
+  return 3 * 60 * 60 * 1000;
+};
 
 const buildSummary = (state: PaperState): PaperState['summary'] => {
   const closedTrades = state.closedTrades;
@@ -99,7 +108,9 @@ export class PaperTradingService {
   public processSignal(signal: SignalRecord): PaperState {
     const state = storageService.getPaperState();
     const key = `${signal.symbol}:${signal.timeframe}`;
-    const existing = state.openPositions.find((item) => `${item.symbol}:${item.timeframe}` === key);
+    const sameTimeframePosition = state.openPositions.find((item) => `${item.symbol}:${item.timeframe}` === key);
+    const sameSymbolPosition = state.openPositions.find((item) => item.symbol === signal.symbol);
+    const existing = sameTimeframePosition ?? (signal.timeframe === '60' ? sameSymbolPosition : undefined);
     const now = signal.createdAt;
 
     if (existing) {
@@ -117,6 +128,7 @@ export class PaperTradingService {
           existing.remainingQuantity = round(existing.remainingQuantity - partialQuantity, 6);
           existing.realizedPnlUsd = round(existing.realizedPnlUsd + partialPnl, 2);
           existing.realizedFeesUsd = round(existing.realizedFeesUsd + exitFee, 2);
+          existing.stopLoss = Math.max(existing.stopLoss, existing.entryPrice);
           existing.tp1Hit = true;
           existing.updatedAt = now;
           state.summary.lastEventAt = now;
@@ -124,11 +136,26 @@ export class PaperTradingService {
 
         if (candleHigh >= existing.takeProfit2) {
           closePosition(state, existing, existing.takeProfit2, 'TAKE_PROFIT_2', now);
-        } else if (signal.recommendation === 'EXIT') {
-          closePosition(state, existing, signal.price, 'EXIT_SIGNAL', now);
+        } else {
+          const ageMs = new Date(now).getTime() - new Date(existing.openedAt).getTime();
+          const weakLongStillLosing =
+            !existing.tp1Hit &&
+            ageMs >= getMinWeakExitAgeMs(existing.timeframe) &&
+            signal.price < existing.entryPrice &&
+            signal.score < 2.4 &&
+            signal.recommendation !== 'BUY_NOW';
+
+          if (signal.recommendation === 'EXIT' || weakLongStillLosing) {
+            closePosition(state, existing, signal.price, 'EXIT_SIGNAL', now);
+          }
         }
       }
-    } else if (signal.recommendation === 'BUY_NOW' && signal.tradePlan) {
+    } else if (
+      signal.recommendation === 'BUY_NOW' &&
+      signal.tradePlan &&
+      !sameSymbolPosition &&
+      state.openPositions.length < maxOpenPositions
+    ) {
       const entryPrice = signal.price;
       const quantity = signal.tradePlan.suggestedPositionUnits;
       const entryFee = entryPrice * quantity * feeRate;

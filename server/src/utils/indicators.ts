@@ -309,7 +309,8 @@ const buildTradePlan = (
 export const evaluateSignal = (
   price: number,
   indicators: IndicatorSnapshot,
-  market: MarketSnapshot
+  market: MarketSnapshot,
+  timeframe = ''
 ): DecisionResult => {
   const reasons: string[] = [];
 
@@ -327,18 +328,39 @@ export const evaluateSignal = (
     indicators.emaFast < indicators.emaMedium &&
     indicators.emaMedium < indicators.emaTrend;
 
+  const isFastTimeframe = timeframe === '15' || timeframe === '5';
+  const minAdxForEntry = isFastTimeframe ? 24 : 22;
+  const minMomentumForEntry = isFastTimeframe ? 1.15 : 0.9;
+  const minVolumeForEntry = isFastTimeframe ? 1.35 : 1.25;
+  const minRsiForEntry = isFastTimeframe ? 56 : 55;
+  const maxRsiForEntry = 66;
+  const maxFundingRateForEntry = 0.00015;
+  const minTrendGapForEntry = 0.8;
+  const maxTrendGapForEntry = 7.5;
+
   const trendStrong = indicators.adx >= 18;
+  const entryTrendConfirmed = indicators.adx >= minAdxForEntry;
   const volumeConfirmed = indicators.volumeRatio >= 1.08;
-  const entryVolumeConfirmed = indicators.volumeRatio >= 1.2;
+  const entryVolumeConfirmed = indicators.volumeRatio >= minVolumeForEntry;
   const highVolatility = indicators.volatilityPct > 4.2;
   const longMomentumOk = indicators.momentumPct >= 0.45;
+  const entryMomentumConfirmed = indicators.momentumPct >= minMomentumForEntry;
+  const rsiEntryOk = indicators.rsi >= minRsiForEntry && indicators.rsi <= maxRsiForEntry;
+  const trendGapEntryOk =
+    indicators.trendGapPct >= minTrendGapForEntry && indicators.trendGapPct <= maxTrendGapForEntry;
+  const fundingTooHot = market.fundingRate !== null && market.fundingRate >= maxFundingRateForEntry;
   const breakout = indicators.swingHigh20 > 0 && price >= indicators.swingHigh20 * 0.999;
-  const breakoutConfirmed = indicators.swingHigh20 > 0 && price >= indicators.swingHigh20 * 1.001;
+  const breakoutConfirmed =
+    indicators.swingHigh20 > 0 &&
+    price >= indicators.swingHigh20 * 1.001 &&
+    entryTrendConfirmed &&
+    entryMomentumConfirmed &&
+    rsiEntryOk;
   const pullback =
     bullishTrend &&
     price >= indicators.emaFast &&
     price <= indicators.emaFast + Math.max(indicators.atr * 0.35, price * 0.0035);
-  const pullbackConfirmed = pullback && indicators.adx >= 22 && indicators.rsi >= 55;
+  const pullbackConfirmed = pullback && entryTrendConfirmed && entryMomentumConfirmed && rsiEntryOk;
   const euphoricBreakout = breakout && (indicators.momentumPct >= 6 || indicators.trendGapPct >= 8);
   const tooExtended =
     (indicators.atr > 0 && (price - indicators.emaFast) / indicators.atr > 2) ||
@@ -421,6 +443,16 @@ export const evaluateSignal = (
     reasons.push('Волатильность слишком высокая: риск выбивания по стопу повышен.');
   }
 
+  if (bullishTrend && !trendGapEntryOk) {
+    score -= 0.45;
+    reasons.push('Отрыв EMA20 от EMA200 неидеальный: либо тренд ещё плоский, либо цена уже слишком далеко от базы.');
+  }
+
+  if (fundingTooHot) {
+    score -= 0.55;
+    reasons.push('Фандинг перегрет: long может быть переполнен, поэтому вход становится рискованнее.');
+  }
+
   if (euphoricBreakout) {
     score -= 1.2;
     reasons.push('Пробой уже слишком горячий: движение вертикальное, и вход сейчас похож на погоню за свечой.');
@@ -442,10 +474,13 @@ export const evaluateSignal = (
 
   const actionable =
     bullishTrend &&
-    trendStrong &&
-    longMomentumOk &&
+    entryTrendConfirmed &&
+    entryMomentumConfirmed &&
     entryVolumeConfirmed &&
+    rsiEntryOk &&
+    trendGapEntryOk &&
     entrySetupConfirmed &&
+    !fundingTooHot &&
     !highVolatility &&
     !tooExtended &&
     confidence >= config.minConfidenceActionable &&
