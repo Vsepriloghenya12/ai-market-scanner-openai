@@ -118,10 +118,25 @@ export interface PaperState {
   lastResetAt: string | null;
 }
 
+export interface PushStatusResponse {
+  enabled: boolean;
+  publicKey: string | null;
+  subscriptionsCount: number;
+  lastNotificationAt: string | null;
+  lastNotification: {
+    title: string;
+    body: string;
+    sentAt: string;
+    deliveredCount: number;
+    failedCount: number;
+  } | null;
+}
+
 export interface HealthResponse {
   analyzer: AnalyzerState;
   universe: UniverseState;
   paper: PaperState['summary'];
+  push: PushStatusResponse;
 }
 
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
@@ -146,6 +161,19 @@ export const api = {
   getOpportunities: () => request<OpportunitiesResponse>('/api/opportunities'),
   getPaper: () => request<PaperState>('/api/paper'),
   getSignalsLatest: () => request<{ items: SignalItem[] }>('/api/signals/latest'),
+  getPushStatus: () => request<PushStatusResponse>('/api/push/status'),
+  getPushPublicKey: () => request<{ enabled: boolean; publicKey: string | null }>('/api/push/public-key'),
+  subscribePush: (subscription: PushSubscriptionJSON) => request<{ ok: boolean; status: PushStatusResponse }>('/api/push/subscribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(subscription)
+  }),
+  unsubscribePush: (endpoint: string) => request<{ ok: boolean; status: PushStatusResponse }>('/api/push/unsubscribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ endpoint })
+  }),
+  sendPushTest: () => request<{ ok: boolean; sent: number; failed: number; status: PushStatusResponse }>('/api/push/test', { method: 'POST' }),
   runAnalyzeNow: () => request<{ ok: boolean }>('/api/analyze/now', { method: 'POST' }),
   resetPaper: () => request<PaperState>('/api/paper/reset', { method: 'POST' }),
   getScanner: () => request<ScannerState>('/api/scanner'),

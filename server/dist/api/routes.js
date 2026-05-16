@@ -9,6 +9,7 @@ const paperTradingService_1 = require("../services/paperTradingService");
 const strategy_1 = require("../services/strategy");
 const storage_1 = require("../services/storage");
 const scheduler_1 = require("../services/scheduler");
+const pushNotificationService_1 = require("../services/pushNotificationService");
 exports.apiRouter = (0, express_1.Router)();
 const recommendationWeight = {
     BUY_NOW: 3,
@@ -47,13 +48,16 @@ exports.apiRouter.get('/health', (_request, response) => {
             maxSpreadPct: config_1.config.maxSpreadPct,
             timeframes: config_1.config.timeframes,
             backtestMaxSymbols: config_1.config.backtestMaxSymbols,
-            backtestCandles: config_1.config.backtestCandles
+            backtestCandles: config_1.config.backtestCandles,
+            pushEnabled: config_1.config.pushEnabled,
+            pushMinRepeatMs: config_1.config.pushMinRepeatMs
         },
         analyzer: storage_1.storageService.getAnalyzerState(),
         universe: storage_1.storageService.getUniverseState(),
         ai: aiAnalysisService_1.aiAnalysisService.getStatus(),
         paper: paperTradingService_1.paperTradingService.getState().summary,
-        backtest: backtestService_1.backtestService.getState().summary
+        backtest: backtestService_1.backtestService.getState().summary,
+        push: pushNotificationService_1.pushNotificationService.getStatus()
     });
 });
 exports.apiRouter.get('/signals', (request, response) => {
@@ -135,7 +139,8 @@ exports.apiRouter.get('/overview', (_request, response) => {
         ai: aiAnalysisService_1.aiAnalysisService.getStatus(),
         timeframes: config_1.config.timeframes,
         paper: paperTradingService_1.paperTradingService.getState().summary,
-        backtest: backtestService_1.backtestService.getState().summary
+        backtest: backtestService_1.backtestService.getState().summary,
+        push: pushNotificationService_1.pushNotificationService.getStatus()
     });
 });
 exports.apiRouter.get('/strategy', (_request, response) => {
@@ -146,6 +151,44 @@ exports.apiRouter.get('/strategy', (_request, response) => {
 });
 exports.apiRouter.get('/ai/status', (_request, response) => {
     response.json(aiAnalysisService_1.aiAnalysisService.getStatus());
+});
+exports.apiRouter.get('/push/status', (_request, response) => {
+    response.json(pushNotificationService_1.pushNotificationService.getStatus());
+});
+exports.apiRouter.get('/push/public-key', (_request, response) => {
+    response.json({
+        enabled: pushNotificationService_1.pushNotificationService.getStatus().enabled,
+        publicKey: pushNotificationService_1.pushNotificationService.getPublicKey()
+    });
+});
+exports.apiRouter.post('/push/subscribe', (request, response) => {
+    try {
+        const subscription = pushNotificationService_1.pushNotificationService.subscribe(request.body, request.get('user-agent') ?? null);
+        response.json({ ok: true, subscriptionId: subscription.id, status: pushNotificationService_1.pushNotificationService.getStatus() });
+    }
+    catch (error) {
+        response.status(400).json({
+            ok: false,
+            message: error instanceof Error ? error.message : 'Не удалось включить push-уведомления'
+        });
+    }
+});
+exports.apiRouter.post('/push/unsubscribe', (request, response) => {
+    const endpoint = typeof request.body?.endpoint === 'string' ? request.body.endpoint : undefined;
+    pushNotificationService_1.pushNotificationService.unsubscribe(endpoint);
+    response.json({ ok: true, status: pushNotificationService_1.pushNotificationService.getStatus() });
+});
+exports.apiRouter.post('/push/test', async (_request, response) => {
+    try {
+        const result = await pushNotificationService_1.pushNotificationService.sendTest();
+        response.json({ ok: true, ...result, status: pushNotificationService_1.pushNotificationService.getStatus() });
+    }
+    catch (error) {
+        response.status(500).json({
+            ok: false,
+            message: error instanceof Error ? error.message : 'Не удалось отправить тестовое push-уведомление'
+        });
+    }
 });
 exports.apiRouter.get('/export/full', (_request, response) => {
     const signals = storage_1.storageService.getSignals();
@@ -172,13 +215,16 @@ exports.apiRouter.get('/export/full', (_request, response) => {
             maxSpreadPct: config_1.config.maxSpreadPct,
             timeframes: config_1.config.timeframes,
             paperStartingBalanceUsd: config_1.config.paperStartingBalanceUsd,
-            simulationFeePct: config_1.config.simulationFeePct
+            simulationFeePct: config_1.config.simulationFeePct,
+            pushEnabled: config_1.config.pushEnabled,
+            pushMinRepeatMs: config_1.config.pushMinRepeatMs
         },
         summary: {
             analyzer,
             universe,
             paper: paper.summary,
             backtest: backtest.summary,
+            push: pushNotificationService_1.pushNotificationService.getStatus(),
             signalsCount: signals.length,
             latestSignalsCount: new Set(signals.map((item) => `${item.symbol}:${item.timeframe}`)).size
         },

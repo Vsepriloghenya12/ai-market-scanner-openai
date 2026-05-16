@@ -10,6 +10,7 @@ const aiAnalysisService_1 = require("./aiAnalysisService");
 const marketData_1 = require("./marketData");
 const paperTradingService_1 = require("./paperTradingService");
 const storage_1 = require("./storage");
+const pushNotificationService_1 = require("./pushNotificationService");
 class AnalysisService {
     async analyze(market, timeframe) {
         const candles = await marketData_1.marketDataService.fetchCandles(market.symbol, timeframe, 260);
@@ -81,6 +82,9 @@ class AnalysisService {
         record.aiAnalysis = await aiAnalysisService_1.aiAnalysisService.analyzeSignal(record);
         storage_1.storageService.saveSignal(record);
         paperTradingService_1.paperTradingService.processSignal(record);
+        void pushNotificationService_1.pushNotificationService.notifySignal(record).catch((error) => {
+            console.error('Ошибка отправки push-уведомления по сигналу:', error);
+        });
         return record;
     }
 }

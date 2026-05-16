@@ -1,4 +1,5 @@
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config';
@@ -6,6 +7,9 @@ import {
   AnalyzerState,
   BacktestState,
   PaperState,
+  PushState,
+  PushNotificationEvent,
+  PushSubscriptionRecord,
   SignalRecord,
   StoredState,
   UniverseState
@@ -80,6 +84,11 @@ const defaultBacktestState = (): BacktestState => ({
   lastError: null
 });
 
+const defaultPushState = (): PushState => ({
+  subscriptions: [],
+  sentEvents: []
+});
+
 const ensureStorageDir = (): void => {
   const directory = path.dirname(config.storageFile);
   if (!fs.existsSync(directory)) {
@@ -92,7 +101,8 @@ const defaultState = (): StoredState => ({
   analyzer: { ...defaultAnalyzerState },
   universe: { ...defaultUniverseState },
   paper: defaultPaperState(),
-  backtest: defaultBacktestState()
+  backtest: defaultBacktestState(),
+  push: defaultPushState()
 });
 
 export class StorageService {
@@ -145,6 +155,12 @@ export class StorageService {
             ...(parsed.backtest?.settings ?? {})
           },
           trades: parsed.backtest?.trades ?? []
+        },
+        push: {
+          ...defaultPushState(),
+          ...(parsed.push ?? {}),
+          subscriptions: parsed.push?.subscriptions ?? [],
+          sentEvents: parsed.push?.sentEvents ?? []
         }
       };
     } catch (error) {
@@ -233,6 +249,59 @@ export class StorageService {
     };
     this.persist();
   }
+
+  public getPushState(): PushState {
+    return {
+      subscriptions: [...this.state.push.subscriptions],
+      sentEvents: [...this.state.push.sentEvents]
+    };
+  }
+
+  public savePushState(nextState: PushState): void {
+    this.state.push = {
+      subscriptions: [...nextState.subscriptions],
+      sentEvents: [...nextState.sentEvents].slice(0, config.pushMaxEvents)
+    };
+    this.persist();
+  }
+
+  public upsertPushSubscription(subscription: Omit<PushSubscriptionRecord, 'id' | 'createdAt' | 'updatedAt'>): PushSubscriptionRecord {
+    const state = this.getPushState();
+    const existing = state.subscriptions.find((item) => item.endpoint === subscription.endpoint);
+    const now = new Date().toISOString();
+
+    if (existing) {
+      const updated = { ...existing, ...subscription, updatedAt: now };
+      state.subscriptions = state.subscriptions.map((item) => (item.endpoint === subscription.endpoint ? updated : item));
+      this.savePushState(state);
+      return updated;
+    }
+
+    const created: PushSubscriptionRecord = {
+      id: crypto.randomUUID(),
+      ...subscription,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    state.subscriptions.unshift(created);
+    this.savePushState(state);
+    return created;
+  }
+
+  public removePushSubscription(endpoint: string): void {
+    const state = this.getPushState();
+    state.subscriptions = state.subscriptions.filter((item) => item.endpoint !== endpoint);
+    this.savePushState(state);
+  }
+
+  public recordPushEvent(event: PushNotificationEvent): void {
+    const state = this.getPushState();
+    state.sentEvents.unshift(event);
+    state.sentEvents = state.sentEvents.slice(0, config.pushMaxEvents);
+    this.savePushState(state);
+  }
 }
+
 
 export const storageService = new StorageService();

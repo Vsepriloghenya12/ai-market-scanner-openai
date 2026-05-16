@@ -6,6 +6,7 @@ import { aiAnalysisService } from './aiAnalysisService';
 import { marketDataService } from './marketData';
 import { paperTradingService } from './paperTradingService';
 import { storageService } from './storage';
+import { pushNotificationService } from './pushNotificationService';
 
 export class AnalysisService {
   public async analyze(market: MarketSnapshot, timeframe: string): Promise<SignalRecord> {
@@ -84,6 +85,9 @@ export class AnalysisService {
 
     storageService.saveSignal(record);
     paperTradingService.processSignal(record);
+    void pushNotificationService.notifySignal(record).catch((error) => {
+      console.error('Ошибка отправки push-уведомления по сигналу:', error);
+    });
     return record;
   }
 }

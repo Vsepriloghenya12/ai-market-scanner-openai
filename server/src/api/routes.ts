@@ -8,6 +8,7 @@ import { paperTradingService } from '../services/paperTradingService';
 import { strategyMeta, strategyRules } from '../services/strategy';
 import { storageService } from '../services/storage';
 import { schedulerService } from '../services/scheduler';
+import { pushNotificationService } from '../services/pushNotificationService';
 
 export const apiRouter = Router();
 
@@ -53,13 +54,16 @@ apiRouter.get('/health', (_request, response) => {
       maxSpreadPct: config.maxSpreadPct,
       timeframes: config.timeframes,
       backtestMaxSymbols: config.backtestMaxSymbols,
-      backtestCandles: config.backtestCandles
+      backtestCandles: config.backtestCandles,
+      pushEnabled: config.pushEnabled,
+      pushMinRepeatMs: config.pushMinRepeatMs
     },
     analyzer: storageService.getAnalyzerState(),
     universe: storageService.getUniverseState(),
     ai: aiAnalysisService.getStatus(),
     paper: paperTradingService.getState().summary,
-    backtest: backtestService.getState().summary
+    backtest: backtestService.getState().summary,
+    push: pushNotificationService.getStatus()
   });
 });
 
@@ -161,7 +165,8 @@ apiRouter.get('/overview', (_request, response) => {
     ai: aiAnalysisService.getStatus(),
     timeframes: config.timeframes,
     paper: paperTradingService.getState().summary,
-    backtest: backtestService.getState().summary
+    backtest: backtestService.getState().summary,
+    push: pushNotificationService.getStatus()
   });
 });
 
@@ -177,6 +182,48 @@ apiRouter.get('/ai/status', (_request, response) => {
 });
 
 
+
+
+apiRouter.get('/push/status', (_request, response) => {
+  response.json(pushNotificationService.getStatus());
+});
+
+apiRouter.get('/push/public-key', (_request, response) => {
+  response.json({
+    enabled: pushNotificationService.getStatus().enabled,
+    publicKey: pushNotificationService.getPublicKey()
+  });
+});
+
+apiRouter.post('/push/subscribe', (request, response) => {
+  try {
+    const subscription = pushNotificationService.subscribe(request.body, request.get('user-agent') ?? null);
+    response.json({ ok: true, subscriptionId: subscription.id, status: pushNotificationService.getStatus() });
+  } catch (error) {
+    response.status(400).json({
+      ok: false,
+      message: error instanceof Error ? error.message : 'Не удалось включить push-уведомления'
+    });
+  }
+});
+
+apiRouter.post('/push/unsubscribe', (request, response) => {
+  const endpoint = typeof request.body?.endpoint === 'string' ? request.body.endpoint : undefined;
+  pushNotificationService.unsubscribe(endpoint);
+  response.json({ ok: true, status: pushNotificationService.getStatus() });
+});
+
+apiRouter.post('/push/test', async (_request, response) => {
+  try {
+    const result = await pushNotificationService.sendTest();
+    response.json({ ok: true, ...result, status: pushNotificationService.getStatus() });
+  } catch (error) {
+    response.status(500).json({
+      ok: false,
+      message: error instanceof Error ? error.message : 'Не удалось отправить тестовое push-уведомление'
+    });
+  }
+});
 
 apiRouter.get('/export/full', (_request, response) => {
   const signals = storageService.getSignals();
@@ -204,13 +251,16 @@ apiRouter.get('/export/full', (_request, response) => {
       maxSpreadPct: config.maxSpreadPct,
       timeframes: config.timeframes,
       paperStartingBalanceUsd: config.paperStartingBalanceUsd,
-      simulationFeePct: config.simulationFeePct
+      simulationFeePct: config.simulationFeePct,
+      pushEnabled: config.pushEnabled,
+      pushMinRepeatMs: config.pushMinRepeatMs
     },
     summary: {
       analyzer,
       universe,
       paper: paper.summary,
       backtest: backtest.summary,
+      push: pushNotificationService.getStatus(),
       signalsCount: signals.length,
       latestSignalsCount: new Set(signals.map((item) => `${item.symbol}:${item.timeframe}`)).size
     },

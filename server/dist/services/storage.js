@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.storageService = exports.StorageService = void 0;
+const node_crypto_1 = __importDefault(require("node:crypto"));
 const node_fs_1 = __importDefault(require("node:fs"));
 const node_path_1 = __importDefault(require("node:path"));
 const config_1 = require("../config");
@@ -72,6 +73,10 @@ const defaultBacktestState = () => ({
     trades: [],
     lastError: null
 });
+const defaultPushState = () => ({
+    subscriptions: [],
+    sentEvents: []
+});
 const ensureStorageDir = () => {
     const directory = node_path_1.default.dirname(config_1.config.storageFile);
     if (!node_fs_1.default.existsSync(directory)) {
@@ -83,7 +88,8 @@ const defaultState = () => ({
     analyzer: { ...defaultAnalyzerState },
     universe: { ...defaultUniverseState },
     paper: defaultPaperState(),
-    backtest: defaultBacktestState()
+    backtest: defaultBacktestState(),
+    push: defaultPushState()
 });
 class StorageService {
     state;
@@ -132,6 +138,12 @@ class StorageService {
                         ...(parsed.backtest?.settings ?? {})
                     },
                     trades: parsed.backtest?.trades ?? []
+                },
+                push: {
+                    ...defaultPushState(),
+                    ...(parsed.push ?? {}),
+                    subscriptions: parsed.push?.subscriptions ?? [],
+                    sentEvents: parsed.push?.sentEvents ?? []
                 }
             };
         }
@@ -207,6 +219,50 @@ class StorageService {
             trades: [...nextState.trades]
         };
         this.persist();
+    }
+    getPushState() {
+        return {
+            subscriptions: [...this.state.push.subscriptions],
+            sentEvents: [...this.state.push.sentEvents]
+        };
+    }
+    savePushState(nextState) {
+        this.state.push = {
+            subscriptions: [...nextState.subscriptions],
+            sentEvents: [...nextState.sentEvents].slice(0, config_1.config.pushMaxEvents)
+        };
+        this.persist();
+    }
+    upsertPushSubscription(subscription) {
+        const state = this.getPushState();
+        const existing = state.subscriptions.find((item) => item.endpoint === subscription.endpoint);
+        const now = new Date().toISOString();
+        if (existing) {
+            const updated = { ...existing, ...subscription, updatedAt: now };
+            state.subscriptions = state.subscriptions.map((item) => (item.endpoint === subscription.endpoint ? updated : item));
+            this.savePushState(state);
+            return updated;
+        }
+        const created = {
+            id: node_crypto_1.default.randomUUID(),
+            ...subscription,
+            createdAt: now,
+            updatedAt: now
+        };
+        state.subscriptions.unshift(created);
+        this.savePushState(state);
+        return created;
+    }
+    removePushSubscription(endpoint) {
+        const state = this.getPushState();
+        state.subscriptions = state.subscriptions.filter((item) => item.endpoint !== endpoint);
+        this.savePushState(state);
+    }
+    recordPushEvent(event) {
+        const state = this.getPushState();
+        state.sentEvents.unshift(event);
+        state.sentEvents = state.sentEvents.slice(0, config_1.config.pushMaxEvents);
+        this.savePushState(state);
     }
 }
 exports.StorageService = StorageService;

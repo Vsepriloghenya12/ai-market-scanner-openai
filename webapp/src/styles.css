@@ -381,3 +381,58 @@ p {
     width: 100%;
   }
 }
+
+button.secondary {
+  background: rgba(148, 163, 184, 0.22);
+  color: #e5edf8;
+}
+
+.push-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.push-card {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 22px;
+  padding: 18px;
+  background: rgba(8, 15, 28, 0.72);
+  display: grid;
+  gap: 8px;
+}
+
+.push-card span {
+  color: #91a0b6;
+  font-size: 13px;
+}
+
+.push-card strong {
+  font-size: 20px;
+}
+
+.push-card p {
+  margin-bottom: 0;
+}
+
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.compact-notice {
+  margin-top: 12px;
+}
+
+@media (max-width: 760px) {
+  .push-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inline-actions {
+    display: grid;
+  }
+}

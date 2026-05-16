@@ -64,5 +64,11 @@ export const config: AppConfig = {
   backtestWarmup: Number(process.env.BACKTEST_WARMUP ?? 220),
   backtestMaxSymbols: Number(process.env.BACKTEST_MAX_SYMBOLS ?? 8),
   backtestMaxHoldCandles: Number(process.env.BACKTEST_MAX_HOLD_CANDLES ?? 36),
-  backtestStartingBalanceUsd: Number(process.env.BACKTEST_STARTING_BALANCE_USD ?? process.env.ACCOUNT_SIZE_USD ?? 100)
+  backtestStartingBalanceUsd: Number(process.env.BACKTEST_STARTING_BALANCE_USD ?? process.env.ACCOUNT_SIZE_USD ?? 100),
+  pushEnabled: parseBoolean(process.env.PUSH_ENABLED, true),
+  pushSubject: process.env.PUSH_SUBJECT?.trim() || 'mailto:admin@example.com',
+  pushMinRepeatMs: Number(process.env.PUSH_MIN_REPEAT_MS ?? 6 * 60 * 60 * 1000),
+  pushMaxEvents: Number(process.env.PUSH_MAX_EVENTS ?? 500),
+  vapidPublicKey: parseOptionalString(process.env.VAPID_PUBLIC_KEY),
+  vapidPrivateKey: parseOptionalString(process.env.VAPID_PRIVATE_KEY)
 };

@@ -8,6 +8,7 @@ export type AIAlignment = 'ALIGNED' | 'MIXED' | 'CONTRARIAN';
 export type PaperPositionStatus = 'OPEN' | 'CLOSED';
 export type PaperCloseReason = 'STOP' | 'TAKE_PROFIT_2' | 'EXIT_SIGNAL' | 'TIMEOUT' | 'MANUAL';
 export type BacktestRunStatus = 'IDLE' | 'RUNNING' | 'DONE' | 'ERROR';
+export type PushDeliveryStatus = 'SENT' | 'FAILED' | 'SKIPPED';
 
 export interface Candle {
   timestamp: number;
@@ -184,6 +185,38 @@ export interface PaperState {
   lastResetAt: string | null;
 }
 
+export interface PushSubscriptionRecord {
+  id: string;
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+  userAgent: string | null;
+}
+
+export interface PushNotificationEvent {
+  id: string;
+  signalId: string;
+  signalKey: string;
+  symbol: string;
+  timeframe: string;
+  title: string;
+  body: string;
+  url: string;
+  sentAt: string;
+  status: PushDeliveryStatus;
+  deliveredCount: number;
+  failedCount: number;
+}
+
+export interface PushState {
+  subscriptions: PushSubscriptionRecord[];
+  sentEvents: PushNotificationEvent[];
+}
+
 export interface BacktestTrade {
   id: string;
   symbol: string;
@@ -264,6 +297,12 @@ export interface AppConfig {
   backtestMaxSymbols: number;
   backtestMaxHoldCandles: number;
   backtestStartingBalanceUsd: number;
+  pushEnabled: boolean;
+  pushSubject: string;
+  pushMinRepeatMs: number;
+  pushMaxEvents: number;
+  vapidPublicKey: string | null;
+  vapidPrivateKey: string | null;
 }
 
 export interface StoredState {
@@ -272,4 +311,5 @@ export interface StoredState {
   universe: UniverseState;
   paper: PaperState;
   backtest: BacktestState;
+  push: PushState;
 }
