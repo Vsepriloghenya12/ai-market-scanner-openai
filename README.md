@@ -105,7 +105,7 @@ PUSH_MIN_REPEAT_MS=21600000
 Для Railway лучше один раз сгенерировать ключи и сохранить их в переменных окружения:
 
 ```bash
-npx web-push generate-vapid-keys
+npm run generate:vapid
 ```
 
 Затем добавить в Railway Variables:

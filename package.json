@@ -13,7 +13,8 @@
   "scripts": {
     "build": "npm run build --workspace server && npm run build --workspace webapp",
     "lint": "npm run lint --workspace server && npm run lint --workspace webapp",
-    "start": "node server/dist/index.js"
+    "start": "node server/dist/index.js",
+    "generate:vapid": "node scripts/generate-vapid-keys.cjs"
   },
   "dependencies": {
     "axios": "^1.16.1",
