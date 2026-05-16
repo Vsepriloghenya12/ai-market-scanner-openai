@@ -4,40 +4,38 @@ exports.strategyMeta = exports.strategyRules = void 0;
 const config_1 = require("../config");
 exports.strategyRules = [
     {
-        id: 'universe-filter',
-        title: 'Сначала отбирать ликвидные фьючерсы',
-        description: 'Сканер не тратит время на тонкий мусорный рынок. В анализ попадают только USDT-фьючерсы с достаточным оборотом и нормальным спредом.'
+        id: 'liquid-market',
+        title: 'Работать только с ликвидными USDT-фьючерсами',
+        description: 'Сканер берёт монеты с нормальным оборотом и спредом, чтобы сигнал был пригоден для демо-сделки.'
     },
     {
-        id: 'trend-filter',
-        title: 'Искать монеты только на рост',
-        description: 'Главный сценарий — long по тренду. Сильный сетап возможен, когда EMA20 > EMA50 > EMA200 и цена держится выше EMA200.'
+        id: 'simple-long-signal',
+        title: 'Давать простой long-сигнал',
+        description: 'Главное действие на экране: покупать, ждать или не покупать. Для покупки всегда показываются вход, стоп, TP1 и TP2.'
     },
     {
-        id: 'breakout-or-pullback',
-        title: 'Покупать либо пробой, либо аккуратный откат',
-        description: 'Система ищет два понятных сценария: пробой максимума последних свечей на объёме или вход после здорового отката к EMA20/EMA50.'
-    },
-    {
-        id: 'momentum-volume',
-        title: 'Без объёма и импульса вход не подтверждён',
-        description: 'Даже хороший тренд без объёма и импульса остаётся только идеей для наблюдения. Статус “Покупать сейчас” появляется только после подтверждения рынком.'
+        id: 'trend-and-momentum',
+        title: 'Искать тренд и импульс без чрезмерно жёстких фильтров',
+        description: 'Стратегия больше не требует идеального совпадения всех индикаторов. Достаточно здорового тренда, допустимого RSI, импульса, объёма и нормального риска.'
     },
     {
         id: 'risk-first',
-        title: 'Сначала риск, потом прибыль',
-        description: 'Стоп и цели считаются от ATR и рыночной структуры. Размер позиции считается от риска на сделку, а не от желания зайти “побольше”.'
+        title: 'Каждый сигнал обязан иметь стоп',
+        description: 'Если невозможно построить понятный риск-план, сигнал не становится покупкой. Размер позиции считается от риска на сделку.'
     },
     {
-        id: 'simple-output',
-        title: 'Для пользователя — только простое действие',
-        description: 'На экране показывается не набор индикаторов, а готовый план: купить сейчас, ждать или выходить из уже открытого long.'
+        id: 'paper-history',
+        title: 'Демо-счёт проверяет стратегию',
+        description: 'Приложение открывает виртуальные сделки по своим сигналам, закрывает их по стопам/целям и хранит историю сделок.'
     }
 ];
 exports.strategyMeta = {
-    adxThreshold: 18,
-    highVolatilityThresholdPct: 4.2,
-    rewardTargetsR: [1.5, 2.5],
+    minMomentumForEntryPct: { fastTimeframe: 0.1, slowTimeframe: 0.18 },
+    minVolumeRatioForEntry: 0.7,
+    rsiEntryZone: { min: 45, max: 74 },
+    maxFundingRateForEntry: 0.00035,
+    highVolatilityThresholdPct: 8,
+    rewardTargetsR: [1.4, 2.2],
     accountSizeUsd: config_1.config.accountSizeUsd,
     riskPerTradePct: config_1.config.riskPerTradePct,
     minConfidenceActionable: config_1.config.minConfidenceActionable,

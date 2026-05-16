@@ -1,35 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  api,
-  BacktestState,
-  downloadFullExport,
-  HealthResponse,
-  OpportunitiesResponse,
-  PaperState,
-  SignalItem
-} from './api';
+import { api, downloadFullExport, HealthResponse, OpportunitiesResponse, PaperState, SignalItem } from './api';
 
 type DashboardState = {
   health: HealthResponse;
   opportunities: OpportunitiesResponse;
   paper: PaperState;
-  backtest: BacktestState;
   latestSignals: SignalItem[];
-};
-
-type TabKey = 'overview' | 'signals' | 'paper' | 'backtest' | 'activity';
-
-type ActivityItem = {
-  title: string;
-  text: string;
-  time: string | null;
 };
 
 const formatMoney = (value: number): string =>
   new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(value);
 
 const formatPrice = (value: number): string =>
-  new Intl.NumberFormat('ru-RU', { maximumFractionDigits: value >= 1000 ? 2 : 4 }).format(value);
+  new Intl.NumberFormat('ru-RU', { maximumFractionDigits: value >= 1000 ? 2 : value >= 1 ? 4 : 8 }).format(value);
 
 const formatPercent = (value: number): string => `${formatMoney(value * 100)}%`;
 
@@ -44,9 +27,9 @@ const timeframeLabel = (value: string): string => {
 };
 
 const recommendationText: Record<SignalItem['recommendation'], string> = {
-  BUY_NOW: 'Покупать сейчас',
+  BUY_NOW: 'Покупать',
   WAIT: 'Ждать',
-  EXIT: 'Не покупать / выходить'
+  EXIT: 'Не покупать'
 };
 
 const recommendationClass: Record<SignalItem['recommendation'], string> = {
@@ -55,49 +38,57 @@ const recommendationClass: Record<SignalItem['recommendation'], string> = {
   EXIT: 'exit'
 };
 
-const backtestStatusText: Record<BacktestState['summary']['status'], string> = {
-  IDLE: 'Ещё не запускался',
-  RUNNING: 'Выполняется',
-  DONE: 'Готов',
-  ERROR: 'Ошибка'
-};
+function SignalCard({ item, featured = false }: { item: SignalItem; featured?: boolean }) {
+  const plan = item.tradePlan;
 
-const secondsToNextBoundary = (minutes: number, now = Date.now()): number => {
-  const ms = minutes * 60_000;
-  return Math.max(0, Math.ceil((ms - (now % ms)) / 1000));
-};
-
-const formatCountdown = (totalSeconds: number): string => {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-};
-
-function SignalCard({ item }: { item: SignalItem }) {
   return (
-    <div className="recommendation-card">
-      <div className="card-topline">
+    <article className={`signal-card ${featured ? 'featured' : ''}`}>
+      <div className="signal-head">
         <div>
-          <strong>{item.symbol}</strong>
-          <span className="timeframe-pill">{timeframeLabel(item.timeframe)}</span>
+          <div className="symbol-line">
+            <strong>{item.symbol}</strong>
+            <span>{timeframeLabel(item.timeframe)}</span>
+          </div>
+          <p>{item.shortText}</p>
         </div>
-        <span className={`status-badge ${recommendationClass[item.recommendation]}`}>
+        <div className={`signal-badge ${recommendationClass[item.recommendation]}`}>
           {recommendationText[item.recommendation]}
-        </span>
+        </div>
       </div>
-      <p>{item.headline}</p>
-      {item.tradePlan ? (
-        <p>
-          Вход {formatPrice(item.tradePlan.entryMin)} – {formatPrice(item.tradePlan.entryMax)} · Стоп{' '}
-          {formatPrice(item.tradePlan.stopLoss)} · TP1 {formatPrice(item.tradePlan.takeProfit1)}
-        </p>
+
+      {plan ? (
+        <div className="plan-grid">
+          <div><span>Вход</span><strong>{formatPrice(plan.entryMin)} – {formatPrice(plan.entryMax)}</strong></div>
+          <div><span>Стоп</span><strong>{formatPrice(plan.stopLoss)}</strong></div>
+          <div><span>TP1</span><strong>{formatPrice(plan.takeProfit1)}</strong></div>
+          <div><span>TP2</span><strong>{formatPrice(plan.takeProfit2)}</strong></div>
+          <div><span>Риск</span><strong>${formatMoney(plan.riskAmountUsd)}</strong></div>
+          <div><span>Размер</span><strong>{formatMoney(plan.suggestedPositionUnits)}</strong></div>
+        </div>
       ) : null}
-    </div>
+
+      <div className="signal-meta">
+        <span>Цена: {formatPrice(item.price)}</span>
+        <span>Уверенность: {formatPercent(item.confidence)}</span>
+        <span>{formatDateTime(item.createdAt)}</span>
+      </div>
+
+      {item.reason.length > 0 ? (
+        <ul className="reason-list">
+          {item.reason.slice(0, 3).map((reason) => <li key={reason}>{reason}</li>)}
+        </ul>
+      ) : null}
+    </article>
   );
 }
 
-function EmptyState({ text }: { text: string }) {
-  return <div className="hero-card">{text}</div>;
+function EmptyState({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="empty-card">
+      <strong>{title}</strong>
+      <p>{text}</p>
+    </div>
+  );
 }
 
 export default function App() {
@@ -105,8 +96,6 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabKey>('overview');
-  const [tick, setTick] = useState(Date.now());
 
   const load = useCallback(async () => {
     try {
@@ -116,8 +105,7 @@ export default function App() {
         api.getPaper(),
         api.getSignalsLatest()
       ]);
-      const backtest = await api.getBacktest();
-      setData({ health, opportunities, paper, backtest, latestSignals: latest.items });
+      setData({ health, opportunities, paper, latestSignals: latest.items });
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Ошибка загрузки');
@@ -127,356 +115,169 @@ export default function App() {
   useEffect(() => {
     load();
     const timer = window.setInterval(load, 15000);
-    const tickTimer = window.setInterval(() => setTick(Date.now()), 1000);
-    return () => {
-      window.clearInterval(timer);
-      window.clearInterval(tickTimer);
-    };
+    return () => window.clearInterval(timer);
   }, [load]);
 
-  const handleRefreshNow = async () => {
+  const runAction = async (label: string, action: () => Promise<unknown>) => {
     try {
       setBusy(true);
-      setMessage('Запускаю новый анализ рынка...');
-      await api.runAnalyzeNow();
+      setMessage(label);
+      await action();
       await load();
-      setMessage('Рынок обновлён.');
-    } catch (loadError) {
-      setMessage(loadError instanceof Error ? loadError.message : 'Не удалось обновить рынок');
+    } catch (actionError) {
+      setMessage(actionError instanceof Error ? actionError.message : 'Действие не выполнено');
+      await load();
     } finally {
       setBusy(false);
     }
   };
 
-  const handleResetPaper = async () => {
-    try {
-      setBusy(true);
-      setMessage('Сбрасываю демо-счёт...');
-      await api.resetPaper();
-      await load();
-      setMessage('Демо-счёт сброшен.');
-    } catch (loadError) {
-      setMessage(loadError instanceof Error ? loadError.message : 'Не удалось сбросить демо-счёт');
-    } finally {
-      setBusy(false);
-    }
-  };
+  const handleRefreshNow = () => runAction('Запускаю анализ рынка...', api.runAnalyzeNow);
 
-  const handleToggleScanner = async () => {
+  const handleToggleScanner = () => {
     if (!data) return;
-
     const nextEnabled = !data.health.analyzer.scanEnabled;
-
-    try {
-      setBusy(true);
-      setMessage(nextEnabled ? 'Включаю сканер...' : 'Выключаю сканер...');
-      await api.setScannerEnabled(nextEnabled);
-      await load();
-      setMessage(nextEnabled ? 'Сканер включён.' : 'Сканер выключен.');
-    } catch (loadError) {
-      setMessage(loadError instanceof Error ? loadError.message : 'Не удалось переключить сканер');
-    } finally {
-      setBusy(false);
-    }
+    runAction(nextEnabled ? 'Включаю сканер...' : 'Выключаю сканер...', () => api.setScannerEnabled(nextEnabled));
   };
 
-  const handleRunBacktest = async () => {
-    try {
-      setBusy(true);
-      setMessage('Запускаю бэктест. Это может занять немного времени...');
-      await api.runBacktest();
-      await load();
-      setMessage('Бэктест завершён.');
-      setActiveTab('backtest');
-    } catch (loadError) {
-      setMessage(loadError instanceof Error ? loadError.message : 'Не удалось запустить бэктест');
-      await load();
-    } finally {
-      setBusy(false);
-    }
+  const handleResetPaper = () => {
+    const confirmed = window.confirm('Сбросить демо-счёт и удалить текущие открытые демо-сделки?');
+    if (!confirmed) return;
+    runAction('Сбрасываю демо-счёт...', api.resetPaper);
   };
 
-  const countdown15 = formatCountdown(secondsToNextBoundary(15, tick));
-  const countdown60 = formatCountdown(secondsToNextBoundary(60, tick));
-
-  const activity = useMemo<ActivityItem[]>(() => {
-    if (!data) return [];
-    const items: ActivityItem[] = [
-      {
-        title: 'Последний цикл анализа',
-        text: `Сканер выполнил ${data.health.analyzer.runCount} циклов. Сейчас в рынке: покупать ${data.opportunities.buyNow.length}, ждать ${data.opportunities.wait.length}.`,
-        time: data.health.analyzer.lastRunAt
-      },
-      {
-        title: 'Последнее событие демо-счёта',
-        text: data.paper.summary.lastEventAt
-          ? `Баланс ${formatMoney(data.paper.summary.balanceUsd)} $, закрытых сделок ${data.paper.summary.closedTrades}.`
-          : 'Демо-счёт ещё не зафиксировал событий.',
-        time: data.paper.summary.lastEventAt
-      }
-    ];
-
-    const latestClosed = data.paper.closedTrades[0];
-    if (latestClosed) {
-      items.push({
-        title: `Закрыта сделка ${latestClosed.symbol}`,
-        text: `PnL ${formatMoney(latestClosed.pnlUsd)} $ · причина: ${latestClosed.closeReason}.`,
-        time: latestClosed.closedAt
-      });
-    }
-
-    const latestSignal = data.latestSignals[0];
-    if (latestSignal) {
-      items.push({
-        title: `Последний сигнал ${latestSignal.symbol}`,
-        text: `${recommendationText[latestSignal.recommendation]} · ${latestSignal.headline}`,
-        time: latestSignal.createdAt
-      });
-    }
-
-    return items.sort((a, b) => new Date(b.time ?? 0).getTime() - new Date(a.time ?? 0).getTime());
-  }, [data]);
+  const bestBuy = data?.opportunities.buyNow[0] ?? null;
+  const fallbackSignals = useMemo(() => data?.latestSignals.filter((item) => item.recommendation !== 'EXIT').slice(0, 6) ?? [], [data]);
 
   if (error) {
-    return <div className="page"><div className="hero-card">Ошибка: {error}</div></div>;
+    return <main className="page"><EmptyState title="Ошибка" text={error} /></main>;
   }
 
   if (!data) {
-    return <div className="page"><div className="hero-card">Загрузка…</div></div>;
+    return <main className="page"><EmptyState title="Загрузка" text="Получаю последние сигналы и демо-сделки." /></main>;
   }
 
-  const { health, opportunities, paper, backtest, latestSignals } = data;
+  const { health, opportunities, paper, latestSignals } = data;
+  const scannerStatus = health.analyzer.isRunning ? 'сканирует сейчас' : health.analyzer.scanEnabled ? 'включён' : 'выключен';
 
   return (
     <main className="page">
       <section className="hero-card">
-        <div className="tab-hero-row">
+        <div>
+          <p className="eyebrow">Bybit USDT Futures · demo trading</p>
+          <h1>Сигналы: что купить и где поставить стоп</h1>
+          <p className="hero-text">
+            Приложение сканирует рынок, показывает только понятные long-планы и автоматически открывает демо-сделки по своим сигналам.
+          </p>
+        </div>
+        <div className="action-panel">
+          <button onClick={handleRefreshNow} disabled={busy || !health.analyzer.scanEnabled}>Обновить сейчас</button>
+          <button onClick={handleToggleScanner} disabled={busy}>{health.analyzer.scanEnabled ? 'Остановить сканер' : 'Включить сканер'}</button>
+          <button onClick={downloadFullExport} disabled={busy}>Скачать историю</button>
+          <button className="danger" onClick={handleResetPaper} disabled={busy}>Сбросить демо</button>
+        </div>
+      </section>
+
+      <section className="stats-grid">
+        <div className="stat-card"><span>Сканер</span><strong>{scannerStatus}</strong></div>
+        <div className="stat-card"><span>Последний анализ</span><strong>{formatDateTime(health.analyzer.lastRunAt)}</strong></div>
+        <div className="stat-card"><span>Сигналов купить</span><strong>{opportunities.buyNow.length}</strong></div>
+        <div className="stat-card"><span>Баланс демо</span><strong>${formatMoney(paper.summary.balanceUsd)}</strong></div>
+        <div className="stat-card"><span>Открыто сделок</span><strong>{paper.summary.openPositions}</strong></div>
+        <div className="stat-card"><span>Закрыто сделок</span><strong>{paper.summary.closedTrades}</strong></div>
+      </section>
+
+      {message ? <div className="notice-card">{message}</div> : null}
+      {health.analyzer.lastError ? <div className="error-card">Ошибка последнего анализа: {health.analyzer.lastError}</div> : null}
+
+      <section className="section-card">
+        <div className="section-title">
           <div>
-            <h1>Сигналы рынка + демо-счёт</h1>
-            <p>
-              Приложение само анализирует рынок, ищет сигналы, открывает виртуальные сделки и считает статистику.
-            </p>
-          </div>
-          <div className="tab-actions">
-            <button onClick={downloadFullExport} disabled={busy}>Выгрузить полную статистику</button>
-            <button onClick={handleRefreshNow} disabled={busy || !health.analyzer.scanEnabled}>Обновить сейчас</button>
-            <button onClick={handleToggleScanner} disabled={busy}>{health.analyzer.scanEnabled ? 'Выключить сканер' : 'Включить сканер'}</button>
-            <button onClick={handleRunBacktest} disabled={busy}>Запустить бэктест</button>
-            <button onClick={handleResetPaper} disabled={busy}>Сбросить демо-счёт</button>
+            <h2>Что покупать сейчас</h2>
+            <p>Сюда попадают только сигналы, по которым приложение само готово открыть демо-сделку.</p>
           </div>
         </div>
+        {bestBuy ? (
+          <SignalCard item={bestBuy} featured />
+        ) : (
+          <EmptyState
+            title="Сейчас нет входа"
+            text="Сканер работает, но пока не нашёл достаточно чистый long-план. Ниже показаны идеи, за которыми можно следить."
+          />
+        )}
+        <div className="cards-grid">
+          {opportunities.buyNow.slice(bestBuy ? 1 : 0, 7).map((item) => <SignalCard key={item.id} item={item} />)}
+        </div>
+      </section>
 
-        <div className="stats-grid compact-top-grid">
-          <div className="stat-card"><span>Последний анализ</span><strong>{formatDateTime(health.analyzer.lastRunAt)}</strong></div>
-          <div className="stat-card"><span>Следующая 15м свеча</span><strong>{countdown15}</strong></div>
-          <div className="stat-card"><span>Следующая 1ч свеча</span><strong>{countdown60}</strong></div>
-          <div className="stat-card"><span>Баланс демо</span><strong>${formatMoney(paper.summary.balanceUsd)}</strong></div>
-          <div className="stat-card"><span>Сканер</span><strong>{health.analyzer.scanEnabled ? 'Включён' : 'Выключен'}</strong></div>
+      <section className="section-card">
+        <h2>Идеи в ожидании</h2>
+        <div className="cards-grid">
+          {(opportunities.wait.length > 0 ? opportunities.wait : fallbackSignals).slice(0, 8).map((item) => <SignalCard key={item.id} item={item} />)}
+        </div>
+        {opportunities.wait.length === 0 && fallbackSignals.length === 0 ? (
+          <EmptyState title="Идей пока нет" text="После первого успешного цикла анализа здесь появятся монеты для наблюдения." />
+        ) : null}
+      </section>
+
+      <section className="section-card">
+        <div className="section-title">
+          <div>
+            <h2>Демо-счёт</h2>
+            <p>Приложение открывает виртуальные сделки только по сигналам “Покупать”.</p>
+          </div>
+        </div>
+        <div className="stats-grid compact">
+          <div className="stat-card"><span>Старт</span><strong>${formatMoney(paper.summary.startingBalanceUsd)}</strong></div>
+          <div className="stat-card"><span>PnL</span><strong>${formatMoney(paper.summary.totalPnlUsd)}</strong></div>
+          <div className="stat-card"><span>Win rate</span><strong>{formatPercent(paper.summary.winRate)}</strong></div>
+          <div className="stat-card"><span>Комиссии</span><strong>${formatMoney(paper.summary.totalFeesUsd)}</strong></div>
         </div>
 
-        {message ? <p style={{ marginTop: 12 }}>{message}</p> : null}
+        <h3>Открытые сделки</h3>
+        <div className="cards-grid">
+          {paper.openPositions.map((position) => (
+            <article className="trade-card" key={position.id}>
+              <div className="symbol-line"><strong>{position.symbol}</strong><span>{timeframeLabel(position.timeframe)}</span></div>
+              <div className="plan-grid small">
+                <div><span>Вход</span><strong>{formatPrice(position.entryPrice)}</strong></div>
+                <div><span>Стоп</span><strong>{formatPrice(position.stopLoss)}</strong></div>
+                <div><span>TP1</span><strong>{formatPrice(position.takeProfit1)}</strong></div>
+                <div><span>TP2</span><strong>{formatPrice(position.takeProfit2)}</strong></div>
+              </div>
+              <p>{position.tp1Hit ? 'TP1 уже достигнут, стоп подтянут.' : 'Сделка открыта по сигналу приложения.'}</p>
+            </article>
+          ))}
+        </div>
+        {paper.openPositions.length === 0 ? <EmptyState title="Открытых сделок нет" text="Демо-счёт откроет сделку автоматически, когда появится сигнал “Покупать”." /> : null}
       </section>
 
-      <section className="tab-strip">
-        <button className={activeTab === 'overview' ? 'active' : ''} onClick={() => setActiveTab('overview')}>Главное</button>
-        <button className={activeTab === 'signals' ? 'active' : ''} onClick={() => setActiveTab('signals')}>Сигналы</button>
-        <button className={activeTab === 'paper' ? 'active' : ''} onClick={() => setActiveTab('paper')}>Демо-счёт</button>
-        <button className={activeTab === 'backtest' ? 'active' : ''} onClick={() => setActiveTab('backtest')}>Бэктест</button>
-        <button className={activeTab === 'activity' ? 'active' : ''} onClick={() => setActiveTab('activity')}>Активность</button>
-      </section>
-
-      {activeTab === 'overview' ? (
-        <>
-          {opportunities.bestIdea ? (
-            <section className="hero-card">
-              <h2>Главный сигнал сейчас: {opportunities.bestIdea.symbol}</h2>
-              <p>{opportunities.bestIdea.shortText}</p>
-              {opportunities.bestIdea.tradePlan ? (
-                <p>
-                  Вход {formatPrice(opportunities.bestIdea.tradePlan.entryMin)} – {formatPrice(opportunities.bestIdea.tradePlan.entryMax)} ·
-                  Стоп {formatPrice(opportunities.bestIdea.tradePlan.stopLoss)} · Продажа 1{' '}
-                  {formatPrice(opportunities.bestIdea.tradePlan.takeProfit1)} · Продажа 2{' '}
-                  {formatPrice(opportunities.bestIdea.tradePlan.takeProfit2)}
-                </p>
-              ) : null}
-            </section>
-          ) : (
-            <EmptyState text={health.analyzer.scanEnabled ? 'Пока нет главного сигнала. Приложение ждёт следующий цикл и новую свечу.' : 'Сканер выключен. Включите его, чтобы приложение снова искало сигналы.'} />
-          )}
-
-          <section className="stats-grid">
-            <div className="stat-card"><span>Покупать сейчас</span><strong>{opportunities.buyNow.length}</strong></div>
-            <div className="stat-card"><span>Ждать</span><strong>{opportunities.wait.length}</strong></div>
-            <div className="stat-card"><span>Открытых сделок</span><strong>{paper.summary.openPositions}</strong></div>
-            <div className="stat-card"><span>Итог PnL</span><strong>${formatMoney(paper.summary.totalPnlUsd)}</strong></div>
-            <div className="stat-card"><span>Сканер</span><strong>{health.analyzer.scanEnabled ? 'Работает' : 'Остановлен'}</strong></div>
-          </section>
-
-          <section className="columns">
-            <div>
-              <h2>Что купить сейчас</h2>
-              {opportunities.buyNow.slice(0, 4).map((item) => <SignalCard key={item.id} item={item} />)}
-              {opportunities.buyNow.length === 0 ? <EmptyState text="Сейчас сильных сигналов на покупку нет." /> : null}
-            </div>
-            <div>
-              <h2>Что ждать</h2>
-              {opportunities.wait.slice(0, 4).map((item) => <SignalCard key={item.id} item={item} />)}
-              {opportunities.wait.length === 0 ? <EmptyState text="Сейчас нет идей в режиме ожидания." /> : null}
-            </div>
-          </section>
-        </>
-      ) : null}
-
-      {activeTab === 'signals' ? (
-        <>
-          <section className="columns">
-            <div>
-              <h2>Покупать сейчас</h2>
-              {opportunities.buyNow.slice(0, 8).map((item) => <SignalCard key={item.id} item={item} />)}
-              {opportunities.buyNow.length === 0 ? <EmptyState text="Пока нет сильных сигналов на вход." /> : null}
-            </div>
-            <div>
-              <h2>Ждать</h2>
-              {opportunities.wait.slice(0, 8).map((item) => <SignalCard key={item.id} item={item} />)}
-              {opportunities.wait.length === 0 ? <EmptyState text="Сейчас всё либо слабое, либо уже отработало." /> : null}
-            </div>
-          </section>
-
-          <section className="hero-card">
-            <h2>Последние сигналы рынка</h2>
-            {latestSignals.slice(0, 12).map((item) => <SignalCard key={item.id} item={item} />)}
-            {latestSignals.length === 0 ? <p>Сигналов пока нет.</p> : null}
-          </section>
-        </>
-      ) : null}
-
-      {activeTab === 'paper' ? (
-        <>
-          <section className="stats-grid">
-            <div className="stat-card"><span>Стартовый баланс</span><strong>${formatMoney(paper.summary.startingBalanceUsd)}</strong></div>
-            <div className="stat-card"><span>Текущий баланс</span><strong>${formatMoney(paper.summary.balanceUsd)}</strong></div>
-            <div className="stat-card"><span>Win rate</span><strong>{formatPercent(paper.summary.winRate)}</strong></div>
-            <div className="stat-card"><span>Комиссии</span><strong>${formatMoney(paper.summary.totalFeesUsd)}</strong></div>
-          </section>
-
-          <section className="columns">
-            <div>
-              <h2>Открытые виртуальные сделки</h2>
-              {paper.openPositions.map((item) => (
-                <div key={item.id} className="recommendation-card">
-                  <strong>{item.symbol}</strong> · {timeframeLabel(item.timeframe)}<br />
-                  Вход {formatPrice(item.entryPrice)} · Стоп {formatPrice(item.stopLoss)} · TP1 {formatPrice(item.takeProfit1)} · TP2{' '}
-                  {formatPrice(item.takeProfit2)}
-                </div>
-              ))}
-              {paper.openPositions.length === 0 ? <EmptyState text="Пока нет открытых демо-сделок." /> : null}
-            </div>
-            <div>
-              <h2>Последние закрытые сделки</h2>
-              {paper.closedTrades.slice(0, 12).map((item) => (
-                <div key={item.id} className="recommendation-card">
-                  <strong>{item.symbol}</strong> · {timeframeLabel(item.timeframe)}<br />
-                  PnL: ${formatMoney(item.pnlUsd)} · Причина: {item.closeReason} · {formatDateTime(item.closedAt)}
-                </div>
-              ))}
-              {paper.closedTrades.length === 0 ? <EmptyState text="Закрытых демо-сделок пока нет." /> : null}
-            </div>
-          </section>
-        </>
-      ) : null}
-
-      {activeTab === 'backtest' ? (
-        <>
-          <section className="hero-card">
-            <div className="tab-hero-row">
+      <section className="section-card">
+        <h2>История сделок</h2>
+        <div className="history-list">
+          {paper.closedTrades.slice(0, 40).map((trade) => (
+            <article className="history-row" key={trade.id}>
               <div>
-                <h2>Бэктест стратегии</h2>
-                <p>
-                  Проверка прогоняет те же правила по историческим свечам и показывает, как стратегия вела бы себя без реальных денег.
-                </p>
+                <strong>{trade.symbol}</strong>
+                <span>{timeframeLabel(trade.timeframe)} · {formatDateTime(trade.closedAt)} · {trade.closeReason}</span>
               </div>
-              <div className="tab-actions">
-                <button onClick={handleRunBacktest} disabled={busy}>
-                  {backtest.summary.status === 'RUNNING' ? 'Бэктест идёт...' : 'Запустить заново'}
-                </button>
+              <div>
+                <strong className={trade.pnlUsd >= 0 ? 'positive' : 'negative'}>${formatMoney(trade.pnlUsd)}</strong>
+                <span>Вход {formatPrice(trade.entryPrice)} → выход {formatPrice(trade.exitPrice)}</span>
               </div>
-            </div>
-            {backtest.lastError ? <p className="error-text">Ошибка: {backtest.lastError}</p> : null}
-          </section>
+            </article>
+          ))}
+        </div>
+        {paper.closedTrades.length === 0 ? <EmptyState title="История пока пустая" text="После закрытия первых демо-сделок здесь будет база для доработки стратегии." /> : null}
+      </section>
 
-          <section className="stats-grid">
-            <div className="stat-card"><span>Статус</span><strong>{backtestStatusText[backtest.summary.status]}</strong></div>
-            <div className="stat-card"><span>Сделок</span><strong>{backtest.summary.tradesCount}</strong></div>
-            <div className="stat-card"><span>Win rate</span><strong>{formatPercent(backtest.summary.winRate)}</strong></div>
-            <div className="stat-card"><span>Итоговый баланс</span><strong>${formatMoney(backtest.summary.endingBalanceUsd)}</strong></div>
-            <div className="stat-card"><span>Max drawdown</span><strong>{formatMoney(backtest.summary.maxDrawdownPct)}%</strong></div>
-            <div className="stat-card"><span>Profit factor</span><strong>{backtest.summary.profitFactor === 999 ? '999+' : formatMoney(backtest.summary.profitFactor)}</strong></div>
-          </section>
-
-          <section className="columns">
-            <div>
-              <h2>Настройки прогона</h2>
-              <div className="recommendation-card">
-                <p>
-                  Монет: {backtest.settings.maxSymbols} · Свечей: {backtest.settings.candles} · Warmup:{' '}
-                  {backtest.settings.warmup} · Max hold: {backtest.settings.maxHoldCandles} свечей
-                </p>
-                <p>
-                  Таймфреймы: {backtest.settings.timeframes.map(timeframeLabel).join(', ')} · Комиссия:{' '}
-                  {formatMoney(backtest.settings.feePct)}%
-                </p>
-                <p>
-                  Последний запуск: {formatDateTime(backtest.summary.completedAt ?? backtest.summary.startedAt)}
-                </p>
-              </div>
-
-              <h2>Заметки</h2>
-              <div className="recommendation-card">
-                {backtest.summary.notes.map((note, index) => <p key={`${note}-${index}`}>{note}</p>)}
-              </div>
-            </div>
-            <div>
-              <h2>Последние сделки бэктеста</h2>
-              {backtest.trades.slice(0, 12).map((item) => (
-                <div key={item.id} className="recommendation-card">
-                  <strong>{item.symbol}</strong> · {timeframeLabel(item.timeframe)} · {item.durationCandles} свечей<br />
-                  PnL: ${formatMoney(item.pnlUsd)} · Комиссии: ${formatMoney(item.feesUsd)} · Причина: {item.closeReason}<br />
-                  Вход {formatPrice(item.entryPrice)} · Выход {formatPrice(item.exitPrice)} · {formatDateTime(item.closedAt)}
-                </div>
-              ))}
-              {backtest.trades.length === 0 ? <EmptyState text="Сделок в последнем бэктесте пока нет." /> : null}
-            </div>
-          </section>
-        </>
-      ) : null}
-
-      {activeTab === 'activity' ? (
-        <>
-          <section className="hero-card">
-            <h2>Что происходит сейчас</h2>
-            <p>
-              Сканер {health.analyzer.isRunning ? 'сейчас выполняет цикл анализа.' : 'ждёт следующий цикл.'} Проверяется до{' '}
-              {health.universe.maxSymbolsToAnalyze} монет, таймфреймы — 15 минут и 1 час.
-            </p>
-            <p>
-              Если цифры на экране не меняются несколько минут подряд — это нормально: стратегия ждёт закрытия новой свечи.
-            </p>
-          </section>
-
-          <section className="hero-card">
-            <h2>Последние действия</h2>
-            <div className="activity-list">
-              {activity.map((item, index) => (
-                <div key={`${item.title}-${index}`} className="activity-item">
-                  <strong>{item.title}</strong>
-                  <p>{item.text}</p>
-                  <span>{formatDateTime(item.time)}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-        </>
-      ) : null}
+      <section className="section-card">
+        <h2>Последние сигналы</h2>
+        <div className="cards-grid">
+          {latestSignals.slice(0, 12).map((item) => <SignalCard key={item.id} item={item} />)}
+        </div>
+        {latestSignals.length === 0 ? <EmptyState title="Сигналов пока нет" text="Нажмите “Обновить сейчас” или дождитесь автоматического цикла сканера." /> : null}
+      </section>
     </main>
   );
 }

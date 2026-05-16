@@ -154,7 +154,9 @@ export class StorageService {
   }
 
   private persist(): void {
-    fs.writeFileSync(config.storageFile, JSON.stringify(this.state, null, 2), 'utf-8');
+    const temporaryFile = `${config.storageFile}.tmp`;
+    fs.writeFileSync(temporaryFile, JSON.stringify(this.state, null, 2), 'utf-8');
+    fs.renameSync(temporaryFile, config.storageFile);
   }
 
   public getSignals(): SignalRecord[] {

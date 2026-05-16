@@ -19,7 +19,7 @@ class AnalysisService {
         const price = candles.at(-1)?.close ?? market.lastPrice;
         const latestCandle = candles.at(-1);
         const indicators = (0, indicators_1.buildIndicatorSnapshot)(candles);
-        const decision = (0, indicators_1.evaluateSignal)(price, indicators, market);
+        const decision = (0, indicators_1.evaluateSignal)(price, indicators, market, timeframe);
         const record = {
             id: node_crypto_1.default.randomUUID(),
             symbol: market.symbol,

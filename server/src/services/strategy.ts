@@ -3,53 +3,39 @@ import { StrategyRule } from '../types';
 
 export const strategyRules: StrategyRule[] = [
   {
-    id: 'universe-filter',
-    title: 'Сначала отбирать ликвидные фьючерсы',
-    description:
-      'Сканер не тратит время на тонкий мусорный рынок. В анализ попадают только USDT-фьючерсы с достаточным оборотом и нормальным спредом.'
+    id: 'liquid-market',
+    title: 'Работать только с ликвидными USDT-фьючерсами',
+    description: 'Сканер берёт монеты с нормальным оборотом и спредом, чтобы сигнал был пригоден для демо-сделки.'
   },
   {
-    id: 'trend-filter',
-    title: 'Искать монеты только на рост',
-    description:
-      'Главный сценарий — long по тренду. Сильный сетап возможен, когда EMA20 > EMA50 > EMA200 и цена держится выше EMA200.'
+    id: 'simple-long-signal',
+    title: 'Давать простой long-сигнал',
+    description: 'Главное действие на экране: покупать, ждать или не покупать. Для покупки всегда показываются вход, стоп, TP1 и TP2.'
   },
   {
-    id: 'breakout-or-pullback',
-    title: 'Покупать либо пробой, либо аккуратный откат',
-    description:
-      'Система ищет два понятных сценария: пробой максимума последних свечей на объёме или вход после здорового отката к EMA20/EMA50.'
-  },
-  {
-    id: 'momentum-volume',
-    title: 'Без объёма и импульса вход не подтверждён',
-    description:
-      'После анализа paper-сделок фильтр входа стал жёстче: для покупки нужен не просто тренд, а подтверждённый импульс, объём, рабочая RSI-зона и отсутствие перегретого фандинга.'
+    id: 'trend-and-momentum',
+    title: 'Искать тренд и импульс без чрезмерно жёстких фильтров',
+    description: 'Стратегия больше не требует идеального совпадения всех индикаторов. Достаточно здорового тренда, допустимого RSI, импульса, объёма и нормального риска.'
   },
   {
     id: 'risk-first',
-    title: 'Сначала риск, потом прибыль',
-    description:
-      'Стоп и цели считаются от ATR и рыночной структуры. После первой цели стоп переносится ближе к безубытку, а число одновременных paper-позиций ограничивается.'
+    title: 'Каждый сигнал обязан иметь стоп',
+    description: 'Если невозможно построить понятный риск-план, сигнал не становится покупкой. Размер позиции считается от риска на сделку.'
   },
   {
-    id: 'simple-output',
-    title: 'Для пользователя — только простое действие',
-    description:
-      'На экране показывается не набор индикаторов, а готовый план: купить сейчас, ждать или выходить из уже открытого long.'
+    id: 'paper-history',
+    title: 'Демо-счёт проверяет стратегию',
+    description: 'Приложение открывает виртуальные сделки по своим сигналам, закрывает их по стопам/целям и хранит историю сделок.'
   }
 ];
 
 export const strategyMeta = {
-  adxThreshold: 18,
-  minAdxForEntry: { fastTimeframe: 24, slowTimeframe: 22 },
-  minMomentumForEntryPct: { fastTimeframe: 1.15, slowTimeframe: 0.9 },
-  minVolumeRatioForEntry: { fastTimeframe: 1.35, slowTimeframe: 1.25 },
-  rsiEntryZone: { min: 55, fastTimeframeMin: 56, max: 66 },
-  trendGapEntryZonePct: { min: 0.8, max: 7.5 },
-  maxFundingRateForEntry: 0.00015,
-  highVolatilityThresholdPct: 4.2,
-  rewardTargetsR: [1.5, 2.5],
+  minMomentumForEntryPct: { fastTimeframe: 0.1, slowTimeframe: 0.18 },
+  minVolumeRatioForEntry: 0.7,
+  rsiEntryZone: { min: 45, max: 74 },
+  maxFundingRateForEntry: 0.00035,
+  highVolatilityThresholdPct: 8,
+  rewardTargetsR: [1.4, 2.2],
   accountSizeUsd: config.accountSizeUsd,
   riskPerTradePct: config.riskPerTradePct,
   minConfidenceActionable: config.minConfidenceActionable,

@@ -45,8 +45,10 @@ export interface SignalItem {
   id: string;
   symbol: string;
   timeframe: string;
+  signal: 'BUY' | 'SELL' | 'HOLD';
   recommendation: 'BUY_NOW' | 'WAIT' | 'EXIT';
   confidence: number;
+  score: number;
   price: number;
   createdAt: string;
   headline: string;
@@ -66,39 +68,23 @@ export interface PaperPosition {
   id: string;
   symbol: string;
   timeframe: string;
+  signalId: string;
+  openedAt: string;
+  updatedAt: string;
   entryPrice: number;
+  quantity: number;
+  remainingQuantity: number;
   stopLoss: number;
   takeProfit1: number;
   takeProfit2: number;
+  tp1Hit: boolean;
+  realizedPnlUsd: number;
+  realizedFeesUsd: number;
+  status: 'OPEN' | 'CLOSED';
+  entryComment: string;
 }
 
 export interface PaperTrade {
-  id: string;
-  symbol: string;
-  timeframe: string;
-  entryPrice: number;
-  exitPrice: number;
-  pnlUsd: number;
-  closeReason: string;
-  closedAt: string;
-}
-
-export interface PaperState {
-  summary: {
-    startingBalanceUsd: number;
-    balanceUsd: number;
-    closedTrades: number;
-    openPositions: number;
-    winRate: number;
-    totalPnlUsd: number;
-    totalFeesUsd: number;
-    lastEventAt: string | null;
-  };
-  openPositions: PaperPosition[];
-  closedTrades: PaperTrade[];
-}
-
-export interface BacktestTrade {
   id: string;
   symbol: string;
   timeframe: string;
@@ -112,47 +98,24 @@ export interface BacktestTrade {
   feesUsd: number;
   closeReason: string;
   tp1Hit: boolean;
-  durationCandles: number;
 }
 
-export interface BacktestState {
+export interface PaperState {
   summary: {
-    runId: string | null;
-    status: 'IDLE' | 'RUNNING' | 'DONE' | 'ERROR';
-    startedAt: string | null;
-    completedAt: string | null;
-    symbolsTested: number;
-    timeframes: string[];
-    tradesCount: number;
+    startingBalanceUsd: number;
+    balanceUsd: number;
+    closedTrades: number;
+    openPositions: number;
     winRate: number;
     totalPnlUsd: number;
     totalFeesUsd: number;
-    endingBalanceUsd: number;
     bestTradeUsd: number;
     worstTradeUsd: number;
-    maxDrawdownPct: number;
-    profitFactor: number;
-    notes: string[];
+    lastEventAt: string | null;
   };
-  settings: {
-    candles: number;
-    warmup: number;
-    maxSymbols: number;
-    maxHoldCandles: number;
-    feePct: number;
-    startingBalanceUsd: number;
-    timeframes: string[];
-  };
-  trades: BacktestTrade[];
-  lastError: string | null;
-}
-
-export interface BacktestRunRequest {
-  maxSymbols?: number;
-  candles?: number;
-  warmup?: number;
-  maxHoldCandles?: number;
-  timeframes?: string[];
+  openPositions: PaperPosition[];
+  closedTrades: PaperTrade[];
+  lastResetAt: string | null;
 }
 
 export interface HealthResponse {
@@ -164,7 +127,16 @@ export interface HealthResponse {
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(path, init);
   if (!response.ok) {
-    throw new Error(`Ошибка запроса: ${response.status}`);
+    let message = `Ошибка запроса: ${response.status}`;
+    try {
+      const payload = (await response.json()) as Partial<{ message: string }>;
+      if (payload.message) {
+        message = payload.message;
+      }
+    } catch {
+      // Оставляем стандартное сообщение, если сервер вернул не JSON.
+    }
+    throw new Error(message);
   }
   return (await response.json()) as T;
 };
@@ -177,19 +149,12 @@ export const api = {
   runAnalyzeNow: () => request<{ ok: boolean }>('/api/analyze/now', { method: 'POST' }),
   resetPaper: () => request<PaperState>('/api/paper/reset', { method: 'POST' }),
   getScanner: () => request<ScannerState>('/api/scanner'),
-  getBacktest: () => request<BacktestState>('/api/backtest'),
-  runBacktest: (body: BacktestRunRequest = {}) => request<{ ok: boolean; result: BacktestState }>('/api/backtest/run', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  }),
   setScannerEnabled: (enabled: boolean) => request<{ ok: boolean } & ScannerState>('/api/scanner/toggle', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ enabled })
   })
 };
-
 
 export const downloadFullExport = (): void => {
   window.location.href = '/api/export/full';

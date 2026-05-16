@@ -202,7 +202,7 @@ class BacktestService {
                             lastPrice: currentCandle.close
                         };
                         const indicators = (0, indicators_1.buildIndicatorSnapshot)(slice);
-                        const decision = (0, indicators_1.evaluateSignal)(currentCandle.close, indicators, syntheticMarket);
+                        const decision = (0, indicators_1.evaluateSignal)(currentCandle.close, indicators, syntheticMarket, timeframe);
                         const signalRecord = decision.tradePlan
                             ? {
                                 id: `${market.symbol}-${timeframe}-${index}`,

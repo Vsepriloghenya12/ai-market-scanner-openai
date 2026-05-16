@@ -141,7 +141,9 @@ class StorageService {
         }
     }
     persist() {
-        node_fs_1.default.writeFileSync(config_1.config.storageFile, JSON.stringify(this.state, null, 2), 'utf-8');
+        const temporaryFile = `${config_1.config.storageFile}.tmp`;
+        node_fs_1.default.writeFileSync(temporaryFile, JSON.stringify(this.state, null, 2), 'utf-8');
+        node_fs_1.default.renameSync(temporaryFile, config_1.config.storageFile);
     }
     getSignals() {
         return [...this.state.signals].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
