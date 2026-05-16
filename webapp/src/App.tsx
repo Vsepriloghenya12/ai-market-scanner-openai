@@ -21,6 +21,8 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 };
 
+type AppTab = 'signals' | 'demo' | 'history' | 'settings';
+
 const formatMoney = (value: number): string =>
   new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(value);
 
@@ -34,15 +36,15 @@ const formatDateTime = (value: string | null): string => (value ? new Date(value
 const timeframeLabel = (value: string): string => {
   const numeric = Number(value);
   if (!Number.isNaN(numeric)) {
-    return numeric < 60 ? `${numeric} мин` : `${numeric / 60} ч`;
+    return numeric < 60 ? `${numeric}м` : `${numeric / 60}ч`;
   }
   return value;
 };
 
 const recommendationText: Record<SignalItem['recommendation'], string> = {
-  BUY_NOW: 'Покупать',
+  BUY_NOW: 'Купить',
   WAIT: 'Ждать',
-  EXIT: 'Не покупать'
+  EXIT: 'Не брать'
 };
 
 const recommendationClass: Record<SignalItem['recommendation'], string> = {
@@ -76,56 +78,52 @@ async function registerServiceWorker(): Promise<ServiceWorkerRegistration> {
   return navigator.serviceWorker.ready;
 }
 
-function SignalCard({ item, featured = false }: { item: SignalItem; featured?: boolean }) {
+function EmptyState({ title }: { title: string }) {
+  return <div className="empty-state">{title}</div>;
+}
+
+function MetricTile({ label, value, strong = false }: { label: string; value: string | number; strong?: boolean }) {
+  return (
+    <div className={`metric-tile ${strong ? 'strong' : ''}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function SignalRow({ item, featured = false }: { item: SignalItem; featured?: boolean }) {
   const plan = item.tradePlan;
 
   return (
-    <article className={`signal-card ${featured ? 'featured' : ''}`}>
-      <div className="signal-head">
-        <div>
+    <article className={`signal-row ${featured ? 'featured' : ''}`}>
+      <div className="row-main">
+        <div className="symbol-stack">
           <div className="symbol-line">
             <strong>{item.symbol}</strong>
             <span>{timeframeLabel(item.timeframe)}</span>
           </div>
-          <p>{item.shortText}</p>
+          <span className="muted">{formatDateTime(item.createdAt)}</span>
         </div>
-        <div className={`signal-badge ${recommendationClass[item.recommendation]}`}>
+        <div className={`status-pill ${recommendationClass[item.recommendation]}`}>
           {recommendationText[item.recommendation]}
         </div>
       </div>
 
       {plan ? (
-        <div className="plan-grid">
-          <div><span>Вход</span><strong>{formatPrice(plan.entryMin)} – {formatPrice(plan.entryMax)}</strong></div>
+        <div className="trade-plan-strip">
+          <div><span>Вход</span><strong>{formatPrice(plan.entryMin)}–{formatPrice(plan.entryMax)}</strong></div>
           <div><span>Стоп</span><strong>{formatPrice(plan.stopLoss)}</strong></div>
           <div><span>TP1</span><strong>{formatPrice(plan.takeProfit1)}</strong></div>
           <div><span>TP2</span><strong>{formatPrice(plan.takeProfit2)}</strong></div>
-          <div><span>Риск</span><strong>${formatMoney(plan.riskAmountUsd)}</strong></div>
-          <div><span>Размер</span><strong>{formatMoney(plan.suggestedPositionUnits)}</strong></div>
         </div>
       ) : null}
 
-      <div className="signal-meta">
-        <span>Цена: {formatPrice(item.price)}</span>
-        <span>Уверенность: {formatPercent(item.confidence)}</span>
-        <span>{formatDateTime(item.createdAt)}</span>
+      <div className="row-footer">
+        <span>Цена {formatPrice(item.price)}</span>
+        <span>Сила {formatPercent(item.confidence)}</span>
+        {plan ? <span>Риск ${formatMoney(plan.riskAmountUsd)}</span> : null}
       </div>
-
-      {item.reason.length > 0 ? (
-        <ul className="reason-list">
-          {item.reason.slice(0, 3).map((reason) => <li key={reason}>{reason}</li>)}
-        </ul>
-      ) : null}
     </article>
-  );
-}
-
-function EmptyState({ title, text }: { title: string; text: string }) {
-  return (
-    <div className="empty-card">
-      <strong>{title}</strong>
-      <p>{text}</p>
-    </div>
   );
 }
 
@@ -139,6 +137,7 @@ export default function App() {
   const [pushMessage, setPushMessage] = useState<string | null>(null);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(false);
+  const [activeTab, setActiveTab] = useState<AppTab>('signals');
 
   const load = useCallback(async () => {
     try {
@@ -218,23 +217,23 @@ export default function App() {
     }
   };
 
-  const handleRefreshNow = () => runAction('Запускаю анализ рынка...', api.runAnalyzeNow);
+  const handleRefreshNow = () => runAction('Анализ рынка...', api.runAnalyzeNow);
 
   const handleToggleScanner = () => {
     if (!data) return;
     const nextEnabled = !data.health.analyzer.scanEnabled;
-    runAction(nextEnabled ? 'Включаю сканер...' : 'Выключаю сканер...', () => api.setScannerEnabled(nextEnabled));
+    runAction(nextEnabled ? 'Сканер включён' : 'Сканер остановлен', () => api.setScannerEnabled(nextEnabled));
   };
 
   const handleResetPaper = () => {
-    const confirmed = window.confirm('Сбросить демо-счёт и удалить текущие открытые демо-сделки?');
+    const confirmed = window.confirm('Сбросить демо-счёт?');
     if (!confirmed) return;
-    runAction('Сбрасываю демо-счёт...', api.resetPaper);
+    runAction('Демо-счёт сброшен', api.resetPaper);
   };
 
   const handleInstall = () => runPushAction(async () => {
     if (!installPrompt) {
-      throw new Error('На этом устройстве установка доступна через меню браузера: “Добавить на главный экран”.');
+      throw new Error('Установка доступна через меню браузера: “Добавить на главный экран”.');
     }
 
     await installPrompt.prompt();
@@ -242,14 +241,14 @@ export default function App() {
     setInstallPrompt(null);
     if (choice.outcome === 'accepted') {
       setInstalled(true);
-      return 'Приложение установлено или установка подтверждена.';
+      return 'Приложение установлено.';
     }
     return 'Установка отменена.';
   });
 
   const handleEnablePush = () => runPushAction(async () => {
     if (!('Notification' in window) || !('PushManager' in window)) {
-      throw new Error('Этот браузер не поддерживает push-уведомления для PWA.');
+      throw new Error('Браузер не поддерживает push-уведомления для PWA.');
     }
 
     const permission = await Notification.requestPermission();
@@ -259,7 +258,7 @@ export default function App() {
 
     const { enabled, publicKey } = await api.getPushPublicKey();
     if (!enabled || !publicKey) {
-      throw new Error('Push-уведомления не включены на сервере.');
+      throw new Error('Push выключен на сервере.');
     }
 
     const registration = await registerServiceWorker();
@@ -271,9 +270,7 @@ export default function App() {
 
     await api.subscribePush(subscription.toJSON());
     const test = await api.sendPushTest();
-    return test.sent > 0
-      ? 'Push включён. Тестовое уведомление отправлено.'
-      : 'Push включён, но тестовое уведомление не доставлено. Проверьте разрешения телефона.';
+    return test.sent > 0 ? 'Push включён. Тест отправлен.' : 'Push включён.';
   });
 
   const handleDisablePush = () => runPushAction(async () => {
@@ -283,176 +280,172 @@ export default function App() {
       await api.unsubscribePush(subscription.endpoint);
       await subscription.unsubscribe();
     }
-    return 'Push-уведомления отключены на этом устройстве.';
+    return 'Push отключён.';
   });
 
   const handleTestPush = () => runPushAction(async () => {
     const result = await api.sendPushTest();
-    return `Тест отправлен: доставлено ${result.sent}, ошибок ${result.failed}.`;
+    return `Тест: ${result.sent}/${result.failed}`;
   });
 
-  const bestBuy = data?.opportunities.buyNow[0] ?? null;
-  const fallbackSignals = useMemo(() => data?.latestSignals.filter((item) => item.recommendation !== 'EXIT').slice(0, 6) ?? [], [data]);
+  const fallbackSignals = useMemo(
+    () => data?.latestSignals.filter((item) => item.recommendation !== 'EXIT').slice(0, 6) ?? [],
+    [data]
+  );
   const notificationPermission = 'Notification' in window ? Notification.permission : 'unsupported';
 
   if (error) {
-    return <main className="page"><EmptyState title="Ошибка" text={error} /></main>;
+    return <main className="app-shell"><EmptyState title={error} /></main>;
   }
 
   if (!data) {
-    return <main className="page"><EmptyState title="Загрузка" text="Получаю последние сигналы и демо-сделки." /></main>;
+    return <main className="app-shell"><EmptyState title="Загрузка..." /></main>;
   }
 
   const { health, opportunities, paper, latestSignals } = data;
-  const scannerStatus = health.analyzer.isRunning ? 'сканирует сейчас' : health.analyzer.scanEnabled ? 'включён' : 'выключен';
+  const scannerStatus = health.analyzer.isRunning ? 'Сканирует' : health.analyzer.scanEnabled ? 'Включён' : 'Выключен';
+  const waitItems = opportunities.wait.length > 0 ? opportunities.wait : fallbackSignals;
 
   return (
-    <main className="page">
-      <section className="hero-card">
+    <main className="app-shell">
+      <header className="app-header">
         <div>
-          <p className="eyebrow">Bybit USDT Futures · demo trading · push alerts</p>
-          <h1>Сигналы: что купить и где поставить стоп</h1>
-          <p className="hero-text">
-            Приложение сканирует рынок, показывает понятные long-планы, открывает демо-сделки и отправляет push на телефон при новом сигнале “Покупать”.
-          </p>
+          <span className="app-label">AI Market Scanner</span>
+          <h1>Сигналы</h1>
         </div>
-        <div className="action-panel">
-          <button onClick={handleRefreshNow} disabled={busy || !health.analyzer.scanEnabled}>Обновить сейчас</button>
-          <button onClick={handleToggleScanner} disabled={busy}>{health.analyzer.scanEnabled ? 'Остановить сканер' : 'Включить сканер'}</button>
-          <button onClick={downloadFullExport} disabled={busy}>Скачать историю</button>
-          <button className="danger" onClick={handleResetPaper} disabled={busy}>Сбросить демо</button>
-        </div>
-      </section>
+        <button className="icon-button" onClick={handleRefreshNow} disabled={busy || !health.analyzer.scanEnabled}>↻</button>
+      </header>
 
-      <section className="stats-grid">
-        <div className="stat-card"><span>Сканер</span><strong>{scannerStatus}</strong></div>
-        <div className="stat-card"><span>Последний анализ</span><strong>{formatDateTime(health.analyzer.lastRunAt)}</strong></div>
-        <div className="stat-card"><span>Сигналов купить</span><strong>{opportunities.buyNow.length}</strong></div>
-        <div className="stat-card"><span>Баланс демо</span><strong>${formatMoney(paper.summary.balanceUsd)}</strong></div>
-        <div className="stat-card"><span>Открыто сделок</span><strong>{paper.summary.openPositions}</strong></div>
-        <div className="stat-card"><span>Push-подписок</span><strong>{pushStatus?.subscriptionsCount ?? 0}</strong></div>
-      </section>
+      <div className="status-strip">
+        <MetricTile label="Сканер" value={scannerStatus} strong={health.analyzer.scanEnabled} />
+        <MetricTile label="Купить" value={opportunities.buyNow.length} strong={opportunities.buyNow.length > 0} />
+        <MetricTile label="Баланс" value={`$${formatMoney(paper.summary.balanceUsd)}`} />
+      </div>
 
-      {message ? <div className="notice-card">{message}</div> : null}
-      {health.analyzer.lastError ? <div className="error-card">Ошибка последнего анализа: {health.analyzer.lastError}</div> : null}
+      {message ? <div className="toast-line">{message}</div> : null}
+      {health.analyzer.lastError ? <div className="toast-line error">{health.analyzer.lastError}</div> : null}
 
-      <section className="section-card">
-        <div className="section-title">
-          <div>
-            <h2>Установка на телефон и push</h2>
-            <p>Установите приложение на главный экран и включите уведомления. Новые сигналы “Покупать” будут приходить даже без открытой вкладки.</p>
+      {activeTab === 'signals' ? (
+        <section className="tab-screen">
+          <div className="section-head compact">
+            <h2>Купить сейчас</h2>
+            <span>{formatDateTime(health.analyzer.lastRunAt)}</span>
           </div>
-        </div>
-        <div className="push-grid">
-          <div className="push-card">
-            <span>Статус приложения</span>
-            <strong>{installed ? 'Установлено' : 'Можно открыть в браузере / добавить на экран'}</strong>
-            <p>Android обычно показывает кнопку установки. На iPhone откройте сайт в Safari → Поделиться → На экран “Домой”.</p>
+          <div className="list-stack">
+            {opportunities.buyNow.length > 0 ? (
+              opportunities.buyNow.slice(0, 10).map((item, index) => <SignalRow key={item.id} item={item} featured={index === 0} />)
+            ) : (
+              <EmptyState title="Сигналов на покупку нет" />
+            )}
           </div>
-          <div className="push-card">
-            <span>Push</span>
-            <strong>{notificationPermission === 'granted' ? 'Разрешены' : notificationPermission === 'denied' ? 'Запрещены' : 'Не включены'}</strong>
-            <p>Подписок на сервере: {pushStatus?.subscriptionsCount ?? 0}. Последний push: {formatDateTime(pushStatus?.lastNotificationAt ?? null)}.</p>
+
+          <div className="section-head compact with-margin">
+            <h2>Наблюдать</h2>
+            <span>{waitItems.length}</span>
           </div>
-        </div>
-        <div className="inline-actions">
-          <button onClick={handleInstall} disabled={pushBusy || installed}>Установить приложение</button>
-          <button onClick={handleEnablePush} disabled={pushBusy || pushStatus?.enabled === false}>Включить push</button>
-          <button onClick={handleTestPush} disabled={pushBusy || (pushStatus?.subscriptionsCount ?? 0) === 0}>Тест push</button>
-          <button className="secondary" onClick={handleDisablePush} disabled={pushBusy}>Отключить push</button>
-        </div>
-        {pushMessage ? <div className="notice-card compact-notice">{pushMessage}</div> : null}
-        {pushStatus?.enabled === false ? <div className="error-card compact-notice">Push выключен на сервере. Проверьте PUSH_ENABLED и VAPID-ключи.</div> : null}
-      </section>
-
-      <section className="section-card">
-        <div className="section-title">
-          <div>
-            <h2>Что покупать сейчас</h2>
-            <p>Сюда попадают только сигналы, по которым приложение само готово открыть демо-сделку.</p>
+          <div className="list-stack">
+            {waitItems.slice(0, 8).map((item) => <SignalRow key={item.id} item={item} />)}
+            {waitItems.length === 0 ? <EmptyState title="Идей пока нет" /> : null}
           </div>
-        </div>
-        {bestBuy ? (
-          <SignalCard item={bestBuy} featured />
-        ) : (
-          <EmptyState
-            title="Сейчас нет входа"
-            text="Сканер работает, но пока не нашёл достаточно чистый long-план. Ниже показаны идеи, за которыми можно следить."
-          />
-        )}
-        <div className="cards-grid">
-          {opportunities.buyNow.slice(bestBuy ? 1 : 0, 7).map((item) => <SignalCard key={item.id} item={item} />)}
-        </div>
-      </section>
+        </section>
+      ) : null}
 
-      <section className="section-card">
-        <h2>Идеи в ожидании</h2>
-        <div className="cards-grid">
-          {(opportunities.wait.length > 0 ? opportunities.wait : fallbackSignals).slice(0, 8).map((item) => <SignalCard key={item.id} item={item} />)}
-        </div>
-        {opportunities.wait.length === 0 && fallbackSignals.length === 0 ? (
-          <EmptyState title="Идей пока нет" text="После первого успешного цикла анализа здесь появятся монеты для наблюдения." />
-        ) : null}
-      </section>
-
-      <section className="section-card">
-        <div className="section-title">
-          <div>
-            <h2>Демо-счёт</h2>
-            <p>Приложение открывает виртуальные сделки только по сигналам “Покупать”.</p>
+      {activeTab === 'demo' ? (
+        <section className="tab-screen">
+          <div className="money-panel">
+            <span>Демо-счёт</span>
+            <strong>${formatMoney(paper.summary.balanceUsd)}</strong>
+            <div className="money-grid">
+              <div><span>PnL</span><b className={paper.summary.totalPnlUsd >= 0 ? 'positive' : 'negative'}>${formatMoney(paper.summary.totalPnlUsd)}</b></div>
+              <div><span>Win</span><b>{formatPercent(paper.summary.winRate)}</b></div>
+              <div><span>Открыто</span><b>{paper.summary.openPositions}</b></div>
+            </div>
           </div>
-        </div>
-        <div className="stats-grid compact">
-          <div className="stat-card"><span>Старт</span><strong>${formatMoney(paper.summary.startingBalanceUsd)}</strong></div>
-          <div className="stat-card"><span>PnL</span><strong>${formatMoney(paper.summary.totalPnlUsd)}</strong></div>
-          <div className="stat-card"><span>Win rate</span><strong>{formatPercent(paper.summary.winRate)}</strong></div>
-          <div className="stat-card"><span>Комиссии</span><strong>${formatMoney(paper.summary.totalFeesUsd)}</strong></div>
-        </div>
 
-        <h3>Открытые сделки</h3>
-        <div className="cards-grid">
-          {paper.openPositions.map((position) => (
-            <article className="trade-card" key={position.id}>
-              <div className="symbol-line"><strong>{position.symbol}</strong><span>{timeframeLabel(position.timeframe)}</span></div>
-              <div className="plan-grid small">
-                <div><span>Вход</span><strong>{formatPrice(position.entryPrice)}</strong></div>
-                <div><span>Стоп</span><strong>{formatPrice(position.stopLoss)}</strong></div>
-                <div><span>TP1</span><strong>{formatPrice(position.takeProfit1)}</strong></div>
-                <div><span>TP2</span><strong>{formatPrice(position.takeProfit2)}</strong></div>
-              </div>
-              <p>{position.tp1Hit ? 'TP1 уже достигнут, стоп подтянут.' : 'Сделка открыта по сигналу приложения.'}</p>
-            </article>
-          ))}
-        </div>
-        {paper.openPositions.length === 0 ? <EmptyState title="Открытых сделок нет" text="Демо-счёт откроет сделку автоматически, когда появится сигнал “Покупать”." /> : null}
-      </section>
+          <div className="section-head compact with-margin">
+            <h2>Открытые сделки</h2>
+            <button className="text-button danger-text" onClick={handleResetPaper} disabled={busy}>Сброс</button>
+          </div>
 
-      <section className="section-card">
-        <h2>История сделок</h2>
-        <div className="history-list">
-          {paper.closedTrades.slice(0, 40).map((trade) => (
-            <article className="history-row" key={trade.id}>
-              <div>
-                <strong>{trade.symbol}</strong>
-                <span>{timeframeLabel(trade.timeframe)} · {formatDateTime(trade.closedAt)} · {trade.closeReason}</span>
-              </div>
-              <div>
-                <strong className={trade.pnlUsd >= 0 ? 'positive' : 'negative'}>${formatMoney(trade.pnlUsd)}</strong>
-                <span>Вход {formatPrice(trade.entryPrice)} → выход {formatPrice(trade.exitPrice)}</span>
-              </div>
-            </article>
-          ))}
-        </div>
-        {paper.closedTrades.length === 0 ? <EmptyState title="История пока пустая" text="После закрытия первых демо-сделок здесь будет база для доработки стратегии." /> : null}
-      </section>
+          <div className="list-stack">
+            {paper.openPositions.map((position) => (
+              <article className="trade-row" key={position.id}>
+                <div className="row-main">
+                  <div className="symbol-line"><strong>{position.symbol}</strong><span>{timeframeLabel(position.timeframe)}</span></div>
+                  <span className={position.tp1Hit ? 'status-pill buy' : 'status-pill wait'}>{position.tp1Hit ? 'TP1' : 'Открыта'}</span>
+                </div>
+                <div className="trade-plan-strip">
+                  <div><span>Вход</span><strong>{formatPrice(position.entryPrice)}</strong></div>
+                  <div><span>Стоп</span><strong>{formatPrice(position.stopLoss)}</strong></div>
+                  <div><span>TP1</span><strong>{formatPrice(position.takeProfit1)}</strong></div>
+                  <div><span>TP2</span><strong>{formatPrice(position.takeProfit2)}</strong></div>
+                </div>
+              </article>
+            ))}
+            {paper.openPositions.length === 0 ? <EmptyState title="Открытых сделок нет" /> : null}
+          </div>
+        </section>
+      ) : null}
 
-      <section className="section-card">
-        <h2>Последние сигналы</h2>
-        <div className="cards-grid">
-          {latestSignals.slice(0, 12).map((item) => <SignalCard key={item.id} item={item} />)}
-        </div>
-        {latestSignals.length === 0 ? <EmptyState title="Сигналов пока нет" text="Нажмите “Обновить сейчас” или дождитесь автоматического цикла сканера." /> : null}
-      </section>
+      {activeTab === 'history' ? (
+        <section className="tab-screen">
+          <div className="section-head compact">
+            <h2>История</h2>
+            <button className="text-button" onClick={downloadFullExport}>Экспорт</button>
+          </div>
+          <div className="history-stack">
+            {paper.closedTrades.slice(0, 80).map((trade) => (
+              <article className="history-item" key={trade.id}>
+                <div>
+                  <strong>{trade.symbol}</strong>
+                  <span>{timeframeLabel(trade.timeframe)} · {trade.closeReason}</span>
+                </div>
+                <div>
+                  <strong className={trade.pnlUsd >= 0 ? 'positive' : 'negative'}>${formatMoney(trade.pnlUsd)}</strong>
+                  <span>{formatPrice(trade.entryPrice)} → {formatPrice(trade.exitPrice)}</span>
+                </div>
+              </article>
+            ))}
+            {paper.closedTrades.length === 0 ? <EmptyState title="История пустая" /> : null}
+          </div>
+        </section>
+      ) : null}
+
+      {activeTab === 'settings' ? (
+        <section className="tab-screen">
+          <div className="settings-list">
+            <div className="settings-row">
+              <div><strong>Сканер</strong><span>{scannerStatus}</span></div>
+              <button className="text-button" onClick={handleToggleScanner} disabled={busy}>{health.analyzer.scanEnabled ? 'Остановить' : 'Включить'}</button>
+            </div>
+            <div className="settings-row">
+              <div><strong>Приложение</strong><span>{installed ? 'Установлено' : 'Не установлено'}</span></div>
+              <button className="text-button" onClick={handleInstall} disabled={pushBusy || installed}>Установить</button>
+            </div>
+            <div className="settings-row">
+              <div><strong>Push</strong><span>{notificationPermission === 'granted' ? 'Разрешены' : notificationPermission === 'denied' ? 'Запрещены' : 'Не включены'}</span></div>
+              <button className="text-button" onClick={handleEnablePush} disabled={pushBusy || pushStatus?.enabled === false}>Включить</button>
+            </div>
+            <div className="settings-row">
+              <div><strong>Тест push</strong><span>{pushStatus?.subscriptionsCount ?? 0} подписок</span></div>
+              <button className="text-button" onClick={handleTestPush} disabled={pushBusy || (pushStatus?.subscriptionsCount ?? 0) === 0}>Тест</button>
+            </div>
+            <div className="settings-row">
+              <div><strong>Push на этом устройстве</strong><span>{formatDateTime(pushStatus?.lastNotificationAt ?? null)}</span></div>
+              <button className="text-button danger-text" onClick={handleDisablePush} disabled={pushBusy}>Отключить</button>
+            </div>
+          </div>
+          {pushMessage ? <div className="toast-line">{pushMessage}</div> : null}
+          {pushStatus?.enabled === false ? <div className="toast-line error">Push выключен на сервере</div> : null}
+        </section>
+      ) : null}
+
+      <nav className="bottom-nav" aria-label="Основная навигация">
+        <button className={activeTab === 'signals' ? 'active' : ''} onClick={() => setActiveTab('signals')}>Сигналы</button>
+        <button className={activeTab === 'demo' ? 'active' : ''} onClick={() => setActiveTab('demo')}>Демо</button>
+        <button className={activeTab === 'history' ? 'active' : ''} onClick={() => setActiveTab('history')}>История</button>
+        <button className={activeTab === 'settings' ? 'active' : ''} onClick={() => setActiveTab('settings')}>Ещё</button>
+      </nav>
     </main>
   );
 }
